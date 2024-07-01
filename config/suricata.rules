@@ -1,0 +1,5 @@
+alert http any any -> any any (msg:"Alert de test HTTP"; sid:240129001; rev:1;)
+alert tcp any any -> any any (msg:"Alert de test TCP"; sid:240129002; rev:1;)
+alert dns any any -> any any (msg:"Alert de test DNS"; sid:240129003; rev:1;)
+alert icmp any any -> any any (msg:"Alert de test ICMP"; sid:240129004; rev:1;) 
+alert http any any -> any any (msg:"Alert de UA"; http.user_agent; content:"Updater app v1.00"; sid:240206001; rev:1;)
