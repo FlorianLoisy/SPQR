@@ -1,0 +1,11 @@
+version: "3.9"
+
+services:
+  spqr_app:
+    build:
+      context: ./spqr_app
+      dockerfile: DOCKERFILE
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./output:/app/output
