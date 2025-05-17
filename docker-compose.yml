@@ -2,43 +2,65 @@ version: '3.8'
 
 services:
   streamlit:
-    build: ./spqr_app
+    build: 
+      context: ./spqr_app
+      dockerfile: DOCKERFILE
     container_name: streamlit
     ports:
       - "8501:8501"
     volumes:
-      - ./SPQR:/app
+      - .:/app
     depends_on:
       - suricata6015
-      - snort2
+      - suricata702
+      - snort29
       - snort3
 
   suricata6015:
     build:
       context: ./images_docker/Docker_Suricata-6.0.15
       dockerfile: Dockerfile
-    container_name: suricata-6.0.15
+    container_name: suricata6015
+    image: suricata:6.0.15
     volumes:
-      - ./SPQR:/data
+      - ./config:/data/config
+      - ./input:/data/input
+      - ./output:/data/output
+    entrypoint: ["/usr/bin/suricata"]
+    command: ["-V"]
+    tty: true
 
   suricata702:
     build:
       context: ./images_docker/Docker_Suricata-7.0.2
       dockerfile: Dockerfile
-    container_name: suricata-7.0.2
+    container_name: suricata702
+    image: suricata:7.0.2
     volumes:
-      - ./SPQR:/data
+      - ./config:/data/config
+      - ./input:/data/input
+      - ./output:/data/output
+    entrypoint: ["/usr/bin/suricata"]
+    command: ["-V"]
+    tty: true
 
-  snort2:
+  snort29:
     build:
       context: ./images_docker/Docker_Snort-2.9
       dockerfile: Dockerfile
-    container_name: snort-2.9
+    container_name: snort29
+    image: snort:2.9
     volumes:
-      - ./SPQR:/data
+      - ./config:/data/config
+      - ./input:/data/input
+      - ./output:/data/output
+    tty: true
 
   snort3:
     image: ciscotalos/snort3
-    container_name: snort-3
+    container_name: snort3
     volumes:
-      - ./SPQR:/data
+      - ./config:/data/config
+      - ./input:/data/input
+      - ./output:/data/output
+    tty: true
