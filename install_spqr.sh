@@ -63,50 +63,16 @@ EOF
     print_success "Dépendances Python installées"
 }
 
-# Fonction pour installer Suricata
-install_suricata() {
-    print_info "Vérification de l'installation de Suricata..."
-    
-    if command_exists suricata; then
-        print_success "Suricata est déjà installé"
-        suricata --version
-        return 0
-    fi
-    
-    print_info "Installation de Suricata..."
-    
-    # Détection du système d'exploitation
-    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        # Linux
-        if command_exists apt-get; then
-            # Debian/Ubuntu
-            sudo apt-get update
-            sudo apt-get install -y suricata
-        elif command_exists yum; then
-            # CentOS/RHEL
-            sudo yum install -y epel-release
-            sudo yum install -y suricata
-        elif command_exists dnf; then
-            # Fedora
-            sudo dnf install -y suricata
-        else
-            print_warning "Gestionnaire de paquets non supporté. Veuillez installer Suricata manuellement."
-            return 1
-        fi
-    elif [[ "$OSTYPE" == "darwin"* ]]; then
-        # macOS
-        if command_exists brew; then
-            brew install suricata
-        else
-            print_warning "Homebrew non trouvé. Veuillez installer Suricata manuellement."
-            return 1
-        fi
+# Fonction pour construire les images Docker IDS
+install_ids_engines() {
+    print_info "Construction des images Docker IDS (Suricata & Snort)..."
+
+    if [ -f "images_docker/install_docker.sh" ]; then
+        bash images_docker/install_docker.sh
+        print_success "Images Docker IDS construites avec succès"
     else
-        print_warning "Système d'exploitation non supporté pour l'installation automatique."
-        return 1
+        print_warning "Script install_docker.sh introuvable. Construction manuelle nécessaire."
     fi
-    
-    print_success "Suricata installé avec succès"
 }
 
 # Fonction pour créer la structure de répertoires
@@ -386,23 +352,23 @@ main() {
     echo "    SPQR - Installation et Configuration"
     echo "============================================"
     echo ""
-    
+
     # Vérifier Python
     if ! command_exists python3; then
         print_error "Python 3 n'est pas installé. Veuillez l'installer avant de continuer."
         exit 1
     fi
-    
+
     print_info "Python 3 détecté: $(python3 --version)"
-    
+
     # Étapes d'installation
     install_python_deps
-    install_suricata
+    install_ids_engines             # <== Ajouté ici
     create_directory_structure
     create_config_files
     create_helper_scripts
     create_test_example
-    
+
     show_final_info
 }
 
