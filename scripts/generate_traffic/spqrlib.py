@@ -247,39 +247,39 @@ class FlowGenerator:
         self.packets.append(dns_flux)
         print(self.packets)
 
-def generate_icmp_communication(self, src_ip, dst_ip, icmp_data):
-    """
-    Génère une communication ICMP et l'ajoute à la liste des paquets.
-    """
-    icmp_config = config_data["icmp"]
-    src_ip = icmp_config["DEFAULT_SRC_IP"]
-    dst_ip = icmp_config["DEFAULT_DST_IP"]
-    nbre_ping = int(icmp_config["DEFAULT_NBRE_PING"])
-    icmp_data = icmp_config["DEFAULT_ICMP_DATA"]
+    def generate_icmp_communication(self, src_ip, dst_ip, icmp_data):
+        """
+        Génère une communication ICMP et l'ajoute à la liste des paquets.
+        """
+        icmp_config = config_data["icmp"]
+        src_ip = icmp_config["DEFAULT_SRC_IP"]
+        dst_ip = icmp_config["DEFAULT_DST_IP"]
+        nbre_ping = int(icmp_config["DEFAULT_NBRE_PING"])
+        icmp_data = icmp_config["DEFAULT_ICMP_DATA"]
     
-    src_mac = "02:42:ac:11:00:02"  # Replace with appropriate MAC addresses
-    dst_mac = "02:42:ac:11:00:03"  # Replace with appropriate MAC addresses
+        src_mac = "02:42:ac:11:00:02"  # Replace with appropriate MAC addresses
+        dst_mac = "02:42:ac:11:00:03"  # Replace with appropriate MAC addresses
     
-    if icmp_data is not None and not isinstance(icmp_data, bytes):
-        icmp_data = icmp_data.encode()
+        if icmp_data is not None and not isinstance(icmp_data, bytes):
+            icmp_data = icmp_data.encode()
 
-    for seq in range(1, nbre_ping + 1):
-        icmp_request = (
-            Ether(src=src_mac, dst=dst_mac)
-            / IP(src=src_ip, dst=dst_ip)
-            / ICMP(type="echo-request", id=12345, seq=seq)
-            / Raw(load=icmp_data)
-        )
-        icmp_response = (
-            Ether(src=dst_mac, dst=src_mac)
-            / IP(src=dst_ip, dst=src_ip)
-            / ICMP(type="echo-reply", id=12345, seq=seq)
-            / Raw(load=icmp_data)
-        )
+        for seq in range(1, nbre_ping + 1):
+            icmp_request = (
+                Ether(src=src_mac, dst=dst_mac)
+                / IP(src=src_ip, dst=dst_ip)
+                / ICMP(type="echo-request", id=12345, seq=seq)
+                / Raw(load=icmp_data)
+            )
+            icmp_response = (
+                Ether(src=dst_mac, dst=src_mac)
+                / IP(src=dst_ip, dst=src_ip)
+                / ICMP(type="echo-reply", id=12345, seq=seq)
+                / Raw(load=icmp_data)
+            )
 
-        icmp_communication = (icmp_request, icmp_response)
-        self.packets.append(icmp_communication)
-        print(self.packets)
+            icmp_communication = (icmp_request, icmp_response)
+            self.packets.append(icmp_communication)
+            print(self.packets)
         
 class PcapGenerator:
     """
@@ -367,3 +367,84 @@ class PcapGenerator:
             )
 
         return flow_gen.packets
+
+    def generate_pcap(attack_type: str, output_file: str, config: dict) -> None:
+        """
+        Fonction d'entrée pour SPQR CLI – Génère un PCAP basé sur un type d'attaque.
+        """
+        flow_gen = FlowGenerator()
+        flow_gen.packets = []
+
+        if attack_type == "web_attack":
+            flow_gen.generate_tcp_handshake(
+                src_ip=config["network"]["source_ip"],
+                dst_ip=config["network"]["dest_ip"],
+                src_port=config["network"]["source_port"],
+                dst_port=config["network"]["dest_port"]
+            )
+            flow_gen.generate_http_communication(
+                src_ip=config["network"]["source_ip"],
+                dst_ip=config["network"]["dest_ip"],
+                src_port=config["network"]["source_port"],
+                dst_port=config["network"]["dest_port"],
+                http_method=None,
+                http_path=None,
+                http_version=None,
+                http_host=None,
+                user_agent=None,
+                custom_headers=None,
+                http_body=None
+            )
+
+        elif attack_type == "data_exfiltration":
+            flow_gen.generate_dns_communication(
+                client_ip=None,
+                src_port=None,
+                dns_server_ip=None,
+                query_domain=None,
+                custom_payload=None
+            )
+
+        elif attack_type == "malware_c2":
+            flow_gen.generate_tcp_handshake(
+                src_ip=config["network"]["source_ip"],
+                dst_ip=config["network"]["dest_ip"],
+                src_port=config["network"]["source_port"],
+                dst_port=443
+            )
+            flow_gen.generate_http_communication(
+                src_ip=config["network"]["source_ip"],
+                dst_ip=config["network"]["dest_ip"],
+                src_port=config["network"]["source_port"],
+                dst_port=443,
+                http_method=None,
+                http_path=None,
+                http_version=None,
+                http_host=None,
+                user_agent=None,
+                custom_headers=None,
+                http_body="GET /malware_command HTTP/1.1"
+            )
+
+        elif attack_type == "dns_tunneling":
+            flow_gen.generate_dns_communication(
+                client_ip=None,
+                src_port=None,
+                dns_server_ip=None,
+                query_domain="secret.data.exfil.example.com",
+                custom_payload=b"hidden_data"
+            )
+
+        elif attack_type == "brute_force" or attack_type == "port_scan":
+            # Pour l'instant, placeholder : ICMP ou ping pour reconnaissance
+            flow_gen.generate_icmp_communication(
+                src_ip=None,
+                dst_ip=None,
+                icmp_data=None
+            )
+
+        else:
+            raise ValueError(f"Type d'attaque non supporté: {attack_type}")
+
+        pkt_flat = [pkt for group in flow_gen.packets for pkt in group]  # aplatir
+        PcapGenerator().save_to_pcap(output_file, pkt_flat)

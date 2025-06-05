@@ -1,103 +1,215 @@
-## SPQR
+# SPQR - Network Rules Testing Tool 🛡️
 
-Le projet SPQR a pour objectifs :
+**SPQR** est un outil simplifié pour tester et valider les règles de détection réseau avec Suricata, Snort 2 et Snort 3, incluant un support natif des conteneurs Docker. Fini les notebooks complexes - utilisez SPQR avec une interface claire, des scripts automatisés, et un mode multi-IDS !
 
-* De mettre en place un LAB de test de règles de sondes réseau
-* De faciliter et d'automatiser les tests de règles SURICATA
+## 🚀 Installation Rapide
 
-## Description
-### Arborescence
-
-```
-spqr
-|   README.md
-|   main.ipynb
-|
-├── config
-│   ├── config.json
-│   ├── suricata-6.0.15.yaml
-│   └── suricata.rules
-├── input
-├── notebooks
-├── output
-├── ressources
-│   ├── Logigramme.drawio
-│   ├── suricata-6.0.15.yaml
-│   └── venv_python.sh
-└── scripts
-    ├── generate_path
-    │   └── folder.py
-    ├── generate_traffic
-    │   └── spqrlib.py
-    └── select_process
-        └── process.py
+### Méthode 1 : Installation Automatique (Recommandée)
+```bash
+# Télécharger et exécuter le script d'installation
+wget https://raw.githubusercontent.com/FlorianLoisy/SPQR/main/install_spqr.sh
+chmod +x install_spqr.sh
+./install_spqr.sh
 ```
 
-- main.ipynb
+### Méthode 2 : Installation Manuelle
+```bash
+# Cloner le projet
+git clone https://github.com/FlorianLoisy/SPQR.git
+cd SPQR
 
-Fichier principal pour la tâche de création de règle. 
+# Installer les dépendances
+pip3 install -r requirements.txt
 
-- config
+# Installer Suricata (Ubuntu/Debian)
+sudo apt-get install suricata
 
-Dossier qui contient les fichiers de configuration indispensable pour chaque tâches de création de règles.
+# Lancer SPQR
+python3 spqr_cli.py --help
+```
 
-    - config.json
-    Le fichier config.json contient les variables pour la génération de flux réseau. L'analyste pourra modifier ces variables en fonction de ces besoins pour les tests de règles.
+## 📋 Utilisation
 
-    - suricata-*.yaml
-    Fichier de configuration de SURICATA.
+### 💻 Interface Graphique (Pour les Débutants)
+```bash
+python3 spqr_gui.py
+```
+- Interface simple avec onglets
+- Test rapide en un clic
+- Configuration visuelle
+- Visualisation des résultats
 
-    - *.rules
-    Fichiers contenant les règles de sonde SURICATA.
+### ⚡ Lancement Rapide
+```bash
+./spqr_launch.sh
+```
+Menu interactif pour choisir votre mode d'utilisation.
 
-- input
+### 💻 Ligne de Commande (Pour les Experts)
 
-Dossier où l'analyste pourra déposer des fichiers en vue des tests (exemple: les fichiers pcap issu de rejeu de malware)
+#### Test Rapide Complet
+```bash
+# Test d'attaque web
+python3 spqr_cli.py quick web_attack
 
-- notebooks
+# Test de malware C2
+python3 spqr_cli.py quick malware_c2
 
-Dossier contenant divers notebooks (actuellement vide)
+# Test d'exfiltration de données
+python3 spqr_cli.py quick data_exfiltration
+```
 
-- output
+#### Tests avec Plusieurs IDS
+```bash
+# Tester un PCAP contre tous les moteurs définis dans config.json
+python3 spqr_cli.py test-all output/pcap/example.pcap
+```
 
-Dossier de sorti des résultats de process de test de règles
+#### Opérations Individuelles
+```bash
+# Lister les types d'attaques disponibles
+python3 spqr_cli.py list
 
-- ressources
+# Générer seulement du trafic
+python3 spqr_cli.py generate web_attack
 
-Dossier contenant les fichiers utilent à la compréhension et la mise en oeuvre de SPQR.
+# Tester avec un fichier PCAP existant
+python3 spqr_cli.py test input/malware_sample.pcap
 
-    - Logigramme.drawio
+# Générer un rapport depuis les logs
+python3 spqr_cli.py report output/logs/eve.json
+```
 
-    Fichier décrivant les différents processus pour SPQR.
+#### Options Avancées
+```bash
+# Utiliser une configuration personnalisée
+python3 spqr_cli.py quick web_attack --config custom_config.json
 
-    - suricata-6.0.15.yaml
+# Spécifier un fichier de sortie
+python3 spqr_cli.py generate malware_c2 --output custom_malware.pcap
 
-    Fichier de configuration par défaut de SURICATA dans la version 6.0.15
+# Utiliser des règles personnalisées
+python3 spqr_cli.py test malware.pcap --rules custom_rules.rules
 
-    - venv_python.sh
+# Mode verbeux
+python3 spqr_cli.py quick web_attack --verbose
+```
 
-    Fichier executable pour la création d'un environnement python virtuel.
+## 📁 Structure du Projet
+```
+SPQR/
+├── spqr_cli.py          # Interface ligne de commande
+├── spqr_gui.py          # Interface graphique
+├── spqr_launch.sh       # Script de lancement rapide
+├── example_test.py      # Exemple d'utilisation
+│
+├── config/
+│   ├── config.json      # Configuration principale
+│   ├── suricata.yaml    # Configuration Suricata
+│   └── suricata.rules   # Règles de détection
+│
+├── input/               # Fichiers PCAP d'entrée
+├── output/
+│   ├── pcap/            # Trafic généré
+│   ├── logs/            # Logs Suricata/Snort
+│   └── reports/         # Rapports générés
+│
+├── images_docker/       # Conteneurs Docker IDS (Suricata/Snort)
+└── scripts/
+    ├── generate_traffic/
+    └── update_rules.sh  # Mise à jour des règles
+```
 
-- scripts
+## 🌟 Fonctionnalités Spéciales
 
-Dossier contenant les différents scripts pour le fonctionnement de SPQR.
+- ✅ **Support Multi-IDS** : Suricata 6, Suricata 7, Snort 2.9, Snort 3 via Docker
+- ✅ **Mode test-all** : compare les résultats de plusieurs IDS en un seul appel
+- ✅ **Structure modulaire** : facile à étendre pour d'autres moteurs ou scénarios
 
-    - generate_path
+## 🔧 Configuration
 
-    Dossier contenant les différents scripts permettant la gestion de l'arboressence lors du process de création de règles de détection.
+### Configuration Multi-IDS (`config/config.json`)
+```json
+{
+  "network": {
+    "source_ip": "192.168.1.10",
+    "dest_ip": "192.168.1.20",
+    "source_port": 1234,
+    "dest_port": 80
+  },
+  "suricata": {
+    "config_file": "config/suricata.yaml",
+    "rules_file": "config/suricata.rules",
+    "log_dir": "output/logs"
+  },
+  "output": {
+    "pcap_dir": "output/pcap",
+    "reports_dir": "output/reports"
+  },
+  "engines": [
+    {"type": "suricata", "version": "6.0.15", "mode": "docker"},
+    {"type": "suricata", "version": "7.0.2", "mode": "docker"},
+    {"type": "snort", "version": "2.9", "mode": "docker"},
+    {"type": "snort", "version": "3", "mode": "docker"}
+  ]
+}
+```
 
-    - generate_traffic
+### Ajout de Règles
+```bash
+# Ajouter une règle manuellement
+echo 'alert tcp any any -> any 8080 (msg:"Custom Rule"; sid:2000001;)' >> config/suricata.rules
 
-    Dossier contenant la library spqrlib.py. Ce fichier contient les class et fonction python pouvant générer des flux réseau au format pcap en se basant sur les variables définies dans le fichier spqr/config/config.json
+# Mise à jour automatique
+./scripts/update_rules.sh
+```
 
-    - select_process
+## 📊 Exemples Multi-IDS
 
-    Dossier contenant les scripts permettant d'établir le cheminement dans le déroulé du process.
+### Comparaison Suricata vs Snort
+```bash
+python3 spqr_cli.py test-all output/pcap/web_attack_test.pcap
 
-## Process
+# Résultat
+=== RÉSULTATS MULTI-IDS ===
+--- suricata_6.0.15 ---
+Log : output/logs/suricata_6.0.15/eve.json
+Rapport : output/reports/suricata_6.0.15/report_*.txt
 
-Le fonctionnement de SPQR suit le process suivant :
+--- snort_3 ---
+Log : output/logs/snort_3/alert.fast
+Rapport : output/reports/snort_3/report_*.txt
+```
 
-![](./ressources/Logigramme.png) 
+## 🔎 Dépannage & Astuces
 
+- **Erreur Docker : permission denied**
+  ```bash
+  sudo usermod -aG docker $USER
+  newgrp docker
+  ```
 
+- **Erreur sur Suricata non trouvé**
+  ```bash
+  sudo apt-get install suricata
+  ```
+
+- **Installer les dépendances Python**
+  ```bash
+  pip3 install -r requirements.txt
+  ```
+
+- **Afficher les logs**
+  ```bash
+  tail -f output/logs/suricata.log
+  ```
+
+## 🏆 Contribuer
+
+- Forkez le projet
+- Ajoutez vos règles ou moteurs IDS
+- Proposez des Pull Requests
+
+---
+
+Développé avec ❤️ par [FlorianLoisy](https://github.com/FlorianLoisy)
