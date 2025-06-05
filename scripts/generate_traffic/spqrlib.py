@@ -367,3 +367,84 @@ class PcapGenerator:
             )
 
         return flow_gen.packets
+
+    def generate_pcap(attack_type: str, output_file: str, config: dict) -> None:
+        """
+        Fonction d'entrée pour SPQR CLI – Génère un PCAP basé sur un type d'attaque.
+        """
+        flow_gen = FlowGenerator()
+        flow_gen.packets = []
+
+        if attack_type == "web_attack":
+            flow_gen.generate_tcp_handshake(
+                src_ip=config["network"]["source_ip"],
+                dst_ip=config["network"]["dest_ip"],
+                src_port=config["network"]["source_port"],
+                dst_port=config["network"]["dest_port"]
+            )
+            flow_gen.generate_http_communication(
+                src_ip=config["network"]["source_ip"],
+                dst_ip=config["network"]["dest_ip"],
+                src_port=config["network"]["source_port"],
+                dst_port=config["network"]["dest_port"],
+                http_method=None,
+                http_path=None,
+                http_version=None,
+                http_host=None,
+                user_agent=None,
+                custom_headers=None,
+                http_body=None
+            )
+
+        elif attack_type == "data_exfiltration":
+            flow_gen.generate_dns_communication(
+                client_ip=None,
+                src_port=None,
+                dns_server_ip=None,
+                query_domain=None,
+                custom_payload=None
+            )
+
+        elif attack_type == "malware_c2":
+            flow_gen.generate_tcp_handshake(
+                src_ip=config["network"]["source_ip"],
+                dst_ip=config["network"]["dest_ip"],
+                src_port=config["network"]["source_port"],
+                dst_port=443
+            )
+            flow_gen.generate_http_communication(
+                src_ip=config["network"]["source_ip"],
+                dst_ip=config["network"]["dest_ip"],
+                src_port=config["network"]["source_port"],
+                dst_port=443,
+                http_method=None,
+                http_path=None,
+                http_version=None,
+                http_host=None,
+                user_agent=None,
+                custom_headers=None,
+                http_body="GET /malware_command HTTP/1.1"
+            )
+
+        elif attack_type == "dns_tunneling":
+            flow_gen.generate_dns_communication(
+                client_ip=None,
+                src_port=None,
+                dns_server_ip=None,
+                query_domain="secret.data.exfil.example.com",
+                custom_payload=b"hidden_data"
+            )
+
+        elif attack_type == "brute_force" or attack_type == "port_scan":
+            # Pour l'instant, placeholder : ICMP ou ping pour reconnaissance
+            flow_gen.generate_icmp_communication(
+                src_ip=None,
+                dst_ip=None,
+                icmp_data=None
+            )
+
+        else:
+            raise ValueError(f"Type d'attaque non supporté: {attack_type}")
+
+        pkt_flat = [pkt for group in flow_gen.packets for pkt in group]  # aplatir
+        PcapGenerator().save_to_pcap(output_file, pkt_flat)
