@@ -247,39 +247,39 @@ class FlowGenerator:
         self.packets.append(dns_flux)
         print(self.packets)
 
-def generate_icmp_communication(self, src_ip, dst_ip, icmp_data):
-    """
-    Génère une communication ICMP et l'ajoute à la liste des paquets.
-    """
-    icmp_config = config_data["icmp"]
-    src_ip = icmp_config["DEFAULT_SRC_IP"]
-    dst_ip = icmp_config["DEFAULT_DST_IP"]
-    nbre_ping = int(icmp_config["DEFAULT_NBRE_PING"])
-    icmp_data = icmp_config["DEFAULT_ICMP_DATA"]
+    def generate_icmp_communication(self, src_ip, dst_ip, icmp_data):
+        """
+        Génère une communication ICMP et l'ajoute à la liste des paquets.
+        """
+        icmp_config = config_data["icmp"]
+        src_ip = icmp_config["DEFAULT_SRC_IP"]
+        dst_ip = icmp_config["DEFAULT_DST_IP"]
+        nbre_ping = int(icmp_config["DEFAULT_NBRE_PING"])
+        icmp_data = icmp_config["DEFAULT_ICMP_DATA"]
     
-    src_mac = "02:42:ac:11:00:02"  # Replace with appropriate MAC addresses
-    dst_mac = "02:42:ac:11:00:03"  # Replace with appropriate MAC addresses
+        src_mac = "02:42:ac:11:00:02"  # Replace with appropriate MAC addresses
+        dst_mac = "02:42:ac:11:00:03"  # Replace with appropriate MAC addresses
     
-    if icmp_data is not None and not isinstance(icmp_data, bytes):
-        icmp_data = icmp_data.encode()
+        if icmp_data is not None and not isinstance(icmp_data, bytes):
+            icmp_data = icmp_data.encode()
 
-    for seq in range(1, nbre_ping + 1):
-        icmp_request = (
-            Ether(src=src_mac, dst=dst_mac)
-            / IP(src=src_ip, dst=dst_ip)
-            / ICMP(type="echo-request", id=12345, seq=seq)
-            / Raw(load=icmp_data)
-        )
-        icmp_response = (
-            Ether(src=dst_mac, dst=src_mac)
-            / IP(src=dst_ip, dst=src_ip)
-            / ICMP(type="echo-reply", id=12345, seq=seq)
-            / Raw(load=icmp_data)
-        )
+        for seq in range(1, nbre_ping + 1):
+            icmp_request = (
+                Ether(src=src_mac, dst=dst_mac)
+                / IP(src=src_ip, dst=dst_ip)
+                / ICMP(type="echo-request", id=12345, seq=seq)
+                / Raw(load=icmp_data)
+            )
+            icmp_response = (
+                Ether(src=dst_mac, dst=src_mac)
+                / IP(src=dst_ip, dst=src_ip)
+                / ICMP(type="echo-reply", id=12345, seq=seq)
+                / Raw(load=icmp_data)
+            )
 
-        icmp_communication = (icmp_request, icmp_response)
-        self.packets.append(icmp_communication)
-        print(self.packets)
+            icmp_communication = (icmp_request, icmp_response)
+            self.packets.append(icmp_communication)
+            print(self.packets)
         
 class PcapGenerator:
     """
