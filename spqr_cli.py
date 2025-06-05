@@ -324,3 +324,42 @@ Exemples d'utilisation:
 
 if __name__ == "__main__":
     main()
+
+def test_all_engines(self, pcap_file: str) -> Dict:
+    """
+    Lance un test pour chaque IDS défini dans config["engines"]
+    """
+    results = {}
+    engines = self.config.get("engines", [])
+    
+    for engine in engines:
+        engine_name = f"{engine['type']}_{engine['version']}"
+        logger.info(f"⏳ Test avec {engine_name}")
+
+        # Adapter log dir temporairement
+        log_dir_backup = self.config["suricata"]["log_dir"]
+        report_dir_backup = self.config["output"]["reports_dir"]
+
+        self.config["suricata"]["log_dir"] = f"output/logs/{engine_name}"
+        self.config["output"]["reports_dir"] = f"output/reports/{engine_name}"
+        Path(self.config["suricata"]["log_dir"]).mkdir(parents=True, exist_ok=True)
+        Path(self.config["output"]["reports_dir"]).mkdir(parents=True, exist_ok=True)
+
+        self.config["engine"] = engine  # injection dynamique
+
+        log_file = self.test_rules(pcap_file)
+        if not log_file:
+            results[engine_name] = {"error": "Échec du test"}
+            continue
+
+        report_file = self.generate_report(log_file)
+        results[engine_name] = {
+            "log_file": log_file,
+            "report_file": report_file
+        }
+
+        # Reset chemins
+        self.config["suricata"]["log_dir"] = log_dir_backup
+        self.config["output"]["reports_dir"] = report_dir_backup
+
+    return results
