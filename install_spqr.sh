@@ -37,7 +37,7 @@ command_exists() {
 # Fonction pour installer les dépendances Python
 install_python_deps() {
     print_info "Installation des dépendances Python..."
-    
+
     # Créer le fichier requirements.txt
     cat > requirements.txt << EOF
 scapy>=2.4.5
@@ -49,7 +49,7 @@ matplotlib>=3.5.0
 argparse>=1.4.0
 pathlib>=1.0.0
 EOF
-    
+
     # Installer les dépendances
     if command_exists pip3; then
         pip3 install -r requirements.txt
@@ -59,8 +59,20 @@ EOF
         print_error "pip non trouvé. Veuillez installer pip."
         exit 1
     fi
-    
+
     print_success "Dépendances Python installées"
+
+    # Installer tkinter selon la distribution
+    print_info "Vérification de tkinter (GUI)..."
+    if command_exists apt-get; then
+        sudo apt-get install -y python3-tk
+    elif command_exists dnf; then
+        sudo dnf install -y python3-tkinter
+    elif command_exists pacman; then
+        sudo pacman -S --noconfirm tk
+    else
+        print_warning "Gestionnaire de paquets inconnu : veuillez installer tkinter manuellement si besoin."
+    fi
 }
 
 # Fonction pour construire les images Docker IDS
