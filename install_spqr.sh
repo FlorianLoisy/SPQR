@@ -34,6 +34,16 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Cloner le projet s'il n'existe pas encore
+if [ ! -d "SPQR" ]; then
+    echo "[INFO] Clonage du dépôt SPQR..."
+    git clone https://github.com/FlorianLoisy/SPQR.git SPQR
+    cd SPQR
+else
+    echo "[INFO] Le dossier SPQR existe déjà. Passage dans ce dossier..."
+    cd SPQR
+fi
+
 # Fonction pour installer les dépendances Python
 install_python_deps() {
     print_info "Installation des dépendances Python..."
@@ -95,108 +105,6 @@ create_directory_structure() {
     mkdir -p {config,input,output/{pcap,logs,reports},notebooks,scripts/{generate_path,generate_traffic,select_process},ressources}
     
     print_success "Structure de répertoires créée"
-}
-
-# Fonction pour créer les fichiers de configuration
-create_config_files() {
-    print_info "Création des fichiers de configuration..."
-    
-    # Créer config.json
-    cat > config/config.json << EOF
-{
-    "network": {
-        "source_ip": "192.168.1.10",
-        "dest_ip": "192.168.1.20",
-        "source_port": 1234,
-        "dest_port": 80,
-        "protocols": ["tcp", "udp", "icmp"]
-    },
-    "suricata": {
-        "config_file": "config/suricata.yaml",
-        "rules_file": "config/suricata.rules",
-        "log_dir": "output/logs",
-        "version": "6.0.15"
-    },
-    "output": {
-        "pcap_dir": "output/pcap",
-        "reports_dir": "output/reports",
-        "format": "json"
-    },
-    "traffic_patterns": {
-        "web_attack": {
-            "description": "Simulation d'attaque web",
-            "target_port": 80,
-            "payload_type": "http"
-        },
-        "malware_c2": {
-            "description": "Communication Command & Control",
-            "target_port": 443,
-            "payload_type": "https"
-        },
-        "data_exfiltration": {
-            "description": "Exfiltration de données",
-            "target_port": 53,
-            "payload_type": "dns"
-        }
-    }
-}
-EOF
-    
-    # Créer un fichier de règles Suricata de base
-    cat > config/suricata.rules << EOF
-# Règles de test SPQR
-alert tcp any any -> any 80 (msg:"HTTP Traffic Detected"; sid:1000001; rev:1;)
-alert tcp any any -> any 443 (msg:"HTTPS Traffic Detected"; sid:1000002; rev:1;)
-alert udp any any -> any 53 (msg:"DNS Query Detected"; sid:1000003; rev:1;)
-alert icmp any any -> any any (msg:"ICMP Traffic Detected"; sid:1000004; rev:1;)
-
-# Règles de détection d'attaques
-alert http any any -> any any (msg:"Potential Web Attack"; content:"../"; sid:1000010; rev:1;)
-alert http any any -> any any (msg:"SQL Injection Attempt"; content:"UNION SELECT"; nocase; sid:1000011; rev:1;)
-alert http any any -> any any (msg:"XSS Attempt"; content:"<script>"; nocase; sid:1000012; rev:1;)
-EOF
-    
-    # Créer configuration Suricata basique
-    cat > config/suricata.yaml << EOF
-%YAML 1.1
----
-# Configuration SPQR pour Suricata
-
-# Règles
-default-rule-path: config/
-rule-files:
-  - suricata.rules
-
-# Sorties
-outputs:
-  - eve-log:
-      enabled: yes
-      filetype: regular
-      filename: output/logs/eve.json
-      types:
-        - alert
-        - http
-        - dns
-        - tls
-
-# Configuration réseau
-host-mode: auto
-
-# Paramètres de performance
-runmode: single
-
-# Logging
-logging:
-  default-log-level: info
-  outputs:
-  - console:
-      enabled: yes
-  - file:
-      enabled: yes
-      filename: output/logs/suricata.log
-EOF
-    
-    print_success "Fichiers de configuration créés"
 }
 
 # Fonction pour créer les scripts d'aide
