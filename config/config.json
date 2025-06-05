@@ -1,0 +1,94 @@
+{
+  "network": {
+    "source_ip": "192.168.1.10",
+    "dest_ip": "192.168.1.20",
+    "source_port": 1234,
+    "dest_port": 80,
+    "protocols": ["tcp", "udp", "icmp"]
+  },
+  "engine": {
+    "type": "suricata",
+    "version": "6.0.15",
+    "mode": "docker"
+  },
+  "suricata": {
+    "config_file": "config/suricata.yaml",
+    "rules_file": "config/suricata.rules",
+    "log_dir": "output/logs"
+  },
+  "snort": {
+    "config_file": "config/snort.conf",
+    "rules_file": "config/snort.rules",
+    "log_dir": "output/logs"
+  },
+  "engines": [
+  { "type": "suricata", "version": "6.0.15", "mode": "docker" },
+  { "type": "suricata", "version": "7.0.2", "mode": "docker" },
+  { "type": "snort", "version": "2.9", "mode": "docker" }
+  ],
+  "output": {
+    "pcap_dir": "output/pcap",
+    "reports_dir": "output/reports",
+    "format": "json"
+  },
+  "traffic_patterns": {
+    "web_attack": {
+      "description": "Simulation d'attaque web",
+      "target_port": 80,
+      "payload_type": "http"
+    },
+    "malware_c2": {
+      "description": "Communication Command & Control",
+      "target_port": 443,
+      "payload_type": "https"
+    },
+    "data_exfiltration": {
+      "description": "Exfiltration de données",
+      "target_port": 53,
+      "payload_type": "dns"
+    },
+    "port_scan": {
+      "description": "Scan de ports TCP SYN",
+      "target_port": 22,
+      "payload_type": "tcp"
+    },
+    "brute_force": {
+      "description": "Tentative de brute force sur HTTP",
+      "target_port": 80,
+      "payload_type": "http"
+    },
+    "dns_tunneling": {
+      "description": "Tunnel DNS avec données encodées",
+      "target_port": 53,
+      "payload_type": "dns"
+    }
+  },
+  "http": {
+    "DEFAULT_SRC_PORT": 1234,
+    "DEFAULT_DST_PORT": 80,
+    "DEFAULT_HTTP_METHOD": "GET",
+    "DEFAULT_HTTP_PATH": "/",
+    "DEFAULT_HTTP_VERSION": "1.1",
+    "DEFAULT_HTTP_HOST": "example.com",
+    "DEFAULT_USER_AGENT": "SPQR-Test-Agent",
+    "DEFAULT_CUSTOM_HEADERS": {},
+    "DEFAULT_HTTP_BODY": ""
+  },
+  "dns": {
+    "DEFAULT_CLIENT_IP": "192.168.1.10",
+    "DEFAULT_DNS_SERVER_IP": "192.168.1.20",
+    "DEFAULT_QUERY_DOMAIN": "example.com",
+    "DEFAULT_SRC_PORT": 53000,
+    "DEFAULT_CUSTOM_PAYLOAD": null
+  },
+  "icmp": {
+    "DEFAULT_SRC_IP": "192.168.1.10",
+    "DEFAULT_DST_IP": "192.168.1.20",
+    "DEFAULT_NBRE_PING": 3,
+    "DEFAULT_ICMP_DATA": "ping-test"
+  },
+  "tcp": {
+    "DEFAULT_SRC_IP": "192.168.1.10",
+    "DEFAULT_DST_IP": "192.168.1.20"
+  }
+}
