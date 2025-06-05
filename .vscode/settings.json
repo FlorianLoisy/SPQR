@@ -1,0 +1,5 @@
+{
+    "python.analysis.extraPaths": [
+        "./scripts/generate_traffic"
+    ]
+}
