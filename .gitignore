@@ -1,0 +1,16 @@
+# Ignorer les fichiers PCAP
+*.pcap
+
+# Ignorer les fichiers de configuration locaux
+config/config.json
+
+# Ignorer les fichiers d'installation tar.gz
+*.tar.gz
+
+# Ignorer tous les fichiers temporaires
+*.tmp
+
+# Ignorer un dossier spécifique
+__pycache__/
+venv/
+output/

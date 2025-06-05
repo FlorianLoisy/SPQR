@@ -50,3 +50,18 @@ class SuricataExecution:
 
         else:
             print("Une erreur est survenue")
+            
+class SnortExecution:
+    def __init__(self):
+        pass
+
+    def snort_execution(self, version, pcap_file, output_dir):
+        if version == 2:
+            command = f"docker run --rm -v $(pwd):/data snort2 snort -r /data/{pcap_file} -c /etc/snort/snort.conf -l /data/{output_dir}"
+        elif version == 3:
+            command = f"docker run --rm -v $(pwd):/data snort3 snort -R /data/{pcap_file} -c /etc/snort/snort.lua -l /data/{output_dir}"
+        else:
+            print("Version de Snort non prise en charge.")
+            return
+        os.system(command)
+
