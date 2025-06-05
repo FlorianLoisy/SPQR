@@ -1,6 +1,6 @@
 # SPQR - Network Rules Testing Tool 🛡️
 
-**SPQR** est un outil simplifié pour tester et valider les règles de détection réseau avec Suricata. Fini les notebooks complexes - utilisez SPQR avec une interface simple !
+**SPQR** est un outil simplifié pour tester et valider les règles de détection réseau avec Suricata, Snort 2 et Snort 3, incluant un support natif des conteneurs Docker. Fini les notebooks complexes - utilisez SPQR avec une interface claire, des scripts automatisés, et un mode multi-IDS !
 
 ## 🚀 Installation Rapide
 
@@ -30,7 +30,7 @@ python3 spqr_cli.py --help
 
 ## 📋 Utilisation
 
-### 🖥️ Interface Graphique (Pour les Débutants)
+### 💻 Interface Graphique (Pour les Débutants)
 ```bash
 python3 spqr_gui.py
 ```
@@ -57,6 +57,12 @@ python3 spqr_cli.py quick malware_c2
 
 # Test d'exfiltration de données
 python3 spqr_cli.py quick data_exfiltration
+```
+
+#### Tests avec Plusieurs IDS
+```bash
+# Tester un PCAP contre tous les moteurs définis dans config.json
+python3 spqr_cli.py test-all output/pcap/example.pcap
 ```
 
 #### Opérations Individuelles
@@ -90,7 +96,6 @@ python3 spqr_cli.py quick web_attack --verbose
 ```
 
 ## 📁 Structure du Projet
-
 ```
 SPQR/
 ├── spqr_cli.py          # Interface ligne de commande
@@ -105,31 +110,25 @@ SPQR/
 │
 ├── input/               # Fichiers PCAP d'entrée
 ├── output/
-│   ├── pcap/           # Trafic généré
-│   ├── logs/           # Logs Suricata
-│   └── reports/        # Rapports générés
+│   ├── pcap/            # Trafic généré
+│   ├── logs/            # Logs Suricata/Snort
+│   └── reports/         # Rapports générés
 │
+├── images_docker/       # Conteneurs Docker IDS (Suricata/Snort)
 └── scripts/
     ├── generate_traffic/
     └── update_rules.sh  # Mise à jour des règles
 ```
 
-## 🎯 Types d'Attaques Disponibles
+## 🌟 Fonctionnalités Spéciales
 
-| Type | Description | Port Cible |
-|------|-------------|------------|
-| `web_attack` | Attaques web (XSS, SQLi) | 80/443 |
-| `malware_c2` | Communication C&C | 443 |
-| `data_exfiltration` | Exfiltration DNS | 53 |
-| `port_scan` | Scan de ports | Multiple |
-| `brute_force` | Attaque par force brute | 22/3389 |
-| `dns_tunneling` | Tunnel DNS | 53 |
+- ✅ **Support Multi-IDS** : Suricata 6, Suricata 7, Snort 2.9, Snort 3 via Docker
+- ✅ **Mode test-all** : compare les résultats de plusieurs IDS en un seul appel
+- ✅ **Structure modulaire** : facile à étendre pour d'autres moteurs ou scénarios
 
-## ⚙️ Configuration
+## 🔧 Configuration
 
-### Configuration Rapide
-Le fichier `config/config.json` contient tous les paramètres :
-
+### Configuration Multi-IDS (`config/config.json`)
 ```json
 {
   "network": {
@@ -140,134 +139,77 @@ Le fichier `config/config.json` contient tous les paramètres :
   },
   "suricata": {
     "config_file": "config/suricata.yaml",
-    "rules_file": "config/suricata.rules"
-  }
+    "rules_file": "config/suricata.rules",
+    "log_dir": "output/logs"
+  },
+  "output": {
+    "pcap_dir": "output/pcap",
+    "reports_dir": "output/reports"
+  },
+  "engines": [
+    {"type": "suricata", "version": "6.0.15", "mode": "docker"},
+    {"type": "suricata", "version": "7.0.2", "mode": "docker"},
+    {"type": "snort", "version": "2.9", "mode": "docker"},
+    {"type": "snort", "version": "3", "mode": "docker"}
+  ]
 }
 ```
 
-### Ajout de Nouvelles Règles
+### Ajout de Règles
 ```bash
-# Ajouter des règles dans le fichier
+# Ajouter une règle manuellement
 echo 'alert tcp any any -> any 8080 (msg:"Custom Rule"; sid:2000001;)' >> config/suricata.rules
 
-# Ou utiliser le script de mise à jour
+# Mise à jour automatique
 ./scripts/update_rules.sh
 ```
 
-## 📊 Exemples d'Utilisation
+## 📊 Exemples Multi-IDS
 
-### Scénario 1 : Test Rapide d'Attaque Web
+### Comparaison Suricata vs Snort
 ```bash
-# Lancer le test complet
-python3 spqr_cli.py quick web_attack
+python3 spqr_cli.py test-all output/pcap/web_attack_test.pcap
 
-# Résultats attendus
-✅ TEST TERMINÉ AVEC SUCCÈS!
-📁 PCAP généré: output/pcap/web_attack_20250605_143022.pcap
-📄 Logs: output/logs/suricata_20250605_143022.json
-📊 Rapport: output/reports/report_20250605_143022.txt
+# Résultat
+=== RÉSULTATS MULTI-IDS ===
+--- suricata_6.0.15 ---
+Log : output/logs/suricata_6.0.15/eve.json
+Rapport : output/reports/suricata_6.0.15/report_*.txt
+
+--- snort_3 ---
+Log : output/logs/snort_3/alert.fast
+Rapport : output/reports/snort_3/report_*.txt
 ```
 
-### Scénario 2 : Analyse de Malware
-```bash
-# Placer le fichier PCAP dans input/
-cp malware_sample.pcap input/
+## 🔎 Dépannage & Astuces
 
-# Tester avec vos règles
-python3 spqr_cli.py test input/malware_sample.pcap
+- **Erreur Docker : permission denied**
+  ```bash
+  sudo usermod -aG docker $USER
+  newgrp docker
+  ```
 
-# Générer le rapport
-python3 spqr_cli.py report output/logs/eve.json
-```
+- **Erreur sur Suricata non trouvé**
+  ```bash
+  sudo apt-get install suricata
+  ```
 
-### Scénario 3 : Développement de Règles
-```bash
-# 1. Générer du trafic spécifique
-python3 spqr_cli.py generate malware_c2 --output test_c2.pcap
+- **Installer les dépendances Python**
+  ```bash
+  pip3 install -r requirements.txt
+  ```
 
-# 2. Tester avec vos nouvelles règles
-python3 spqr_cli.py test test_c2.pcap --rules my_rules.rules
+- **Afficher les logs**
+  ```bash
+  tail -f output/logs/suricata.log
+  ```
 
-# 3. Analyser les résultats
-python3 spqr_cli.py report output/logs/eve.json
-```
+## 🏆 Contribuer
 
-## 🔧 Dépannage
+- Forkez le projet
+- Ajoutez vos règles ou moteurs IDS
+- Proposez des Pull Requests
 
-### Problèmes Courants
+---
 
-**Suricata non trouvé**
-```bash
-# Installer Suricata
-sudo apt-get install suricata  # Ubuntu/Debian
-brew install suricata         # macOS
-```
-
-**Erreur de permissions**
-```bash
-# Donner les permissions d'exécution
-chmod +x spqr_launch.sh
-chmod +x scripts/update_rules.sh
-```
-
-**Module Python manquant**
-```bash
-# Installer les dépendances
-pip3 install -r requirements.txt
-```
-
-### Logs de Débogage
-```bash
-# Mode verbeux pour plus d'informations
-python3 spqr_cli.py quick web_attack --verbose
-
-# Consulter les logs Suricata
-tail -f output/logs/suricata.log
-```
-
-## 🆚 Avantages par rapport au Notebook
-
-| Aspect | Notebook | SPQR Simplifié |
-|--------|----------|----------------|
-| **Facilité d'usage** | ⚠️ Complexe | ✅ Simple |
-| **Installation** | ⚠️ Jupyter requis | ✅ Prêt à l'emploi |
-| **Automatisation** | ❌ Difficile | ✅ Scripts inclus |
-| **Interface** | ⚠️ Web uniquement | ✅ CLI + GUI |
-| **Déploiement** | ❌ Serveur requis | ✅ Local |
-| **Maintenance** | ⚠️ Cellules à gérer | ✅ Auto-maintenance |
-
-## 🚀 Fonctionnalités Avancées
-
-### Intégration CI/CD
-```bash
-# Dans votre pipeline
-python3 spqr_cli.py quick web_attack
-if [ $? -eq 0 ]; then
-    echo "Tests de règles réussis"
-else
-    echo "Échec des tests de règles"
-    exit 1
-fi
-```
-
-### Utilisation Programmatique
-```python
-from spqr_cli import SPQRSimple
-
-# Initialiser SPQR
-spqr = SPQRSimple()
-
-# Lancer des tests
-results = spqr.quick_test("web_attack")
-if "error" not in results:
-    print(f"Test réussi: {results['report_file']}")
-```
-
-### Personnalisation
-```bash
-# Créer vos propres types d'attaques
-# Modifier config/config.json pour ajouter :
-{
-  "traffic_patterns": {
-    "my_custom_attack": {
-      "description": "Mon attaque personn
+Développé avec ❤️ par [FlorianLoisy](https://github.com/FlorianLoisy)
