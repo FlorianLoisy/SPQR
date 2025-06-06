@@ -13,27 +13,44 @@ chmod +x install_spqr.sh
 ```
 
 ### Méthode 2 : Installation Manuelle
+
 ```bash
 # Cloner le projet
 git clone https://github.com/FlorianLoisy/SPQR.git
 cd SPQR
 
-# Installer les dépendances
+# Installer les dépendances Python
 pip3 install -r requirements.txt
 
-# Installer Suricata (Ubuntu/Debian)
-sudo apt-get install suricata
+# Vérifier que Docker est installé, sinon exécuter :
+cd images_docker
+chmod +x install_docker.sh
+./install_docker.sh
+cd ..
+
+# Donner les droits Docker à l'utilisateur si nécessaire
+sudo usermod -aG docker $USER
+newgrp docker
+
+# Génération des images docker 
+cd images_docker
+chmod +x build_all_images.sh
+./build_all_images.sh
 
 # Lancer SPQR
 python3 spqr_cli.py --help
 ```
 
-## 📋 Utilisation
+#### 📦 Exemple d'exécution manuelle d'un moteur Docker
 
-### 💻 Interface Graphique (Pour les Débutants)
 ```bash
-python3 spqr_gui.py
+# Exécuter un test avec Suricata 6 en conteneur (exemple)
+docker run --rm -v $(pwd)/output/pcap:/data -v $(pwd)/config:/config -v $(pwd)/output/logs:/logs spqr/suricata-6 \
+  -c /config/suricata.yaml -S /config/suricata.rules -r /data/web_attack_test.pcap -l /logs --runmode single
 ```
+
+> Remplace `spqr/suricata-6` par le nom de ton image (ex: `spqr_suricata_6.0.15`) et adapte les chemins si nécessaire.
+
 - Interface simple avec onglets
 - Test rapide en un clic
 - Configuration visuelle
