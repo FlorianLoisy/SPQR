@@ -32,6 +32,11 @@ cd ..
 sudo usermod -aG docker $USER
 newgrp docker
 
+# Génération des images docker 
+cd images_docker
+chmod +x build_all_images.sh
+./build_all_images.sh
+
 # Lancer SPQR
 python3 spqr_cli.py --help
 ```
