@@ -14,6 +14,7 @@ from datetime import datetime
 import logging
 from typing import Dict, List
 
+from spqrlib import PcapGenerator
 from spqrlib import generate_pcap
 
 logging.basicConfig(level=logging.INFO)

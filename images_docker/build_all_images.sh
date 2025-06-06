@@ -17,10 +17,10 @@ build_image() {
   fi
 }
 
-build_image Docker_Suricata-6.0.15 spqr_suricata_6.0.15
-build_image Docker_Suricata-7.0.2 spqr_suricata_7.0.2
-build_image Docker_Snort-2.9 spqr_snort_2.9
-build_image Docker_Snort-3 spqr_snort_3
+build_image Docker_Suricata-6.0.15 suricata_6.0.15
+build_image Docker_Suricata-7.0.2 suricata_7.0.2
+build_image Docker_Snort-2.9 snort_2.9
+build_image Docker_Snort-3 snort_3
 
 echo "✅ Toutes les images disponibles ont été construites."
 

@@ -13,7 +13,7 @@ from pathlib import Path
 import logging
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), "scripts", "generate_traffic"))
-from spqrlib import generate_pcap
+from spqrlib import PcapGenerator
 
 
 # Import du module CLI
