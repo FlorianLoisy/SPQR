@@ -41,4 +41,8 @@ case $choice in
     *)
         echo "Option invalide"
         ;;
+<<<<<<< HEAD
 esac
+=======
+esac
+>>>>>>> 33226148057da68856b71e95a7dfb22beb934863
