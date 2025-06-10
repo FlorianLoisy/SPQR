@@ -12,6 +12,13 @@ import os
 from pathlib import Path
 import logging
 
+from scripts.generate_traffic.spqrlib import (
+    PcapGenerator, FlowGenerator, generate_pcap
+)  # Assurez-vous que le nom du fichier est correct
+from scripts.generate_path.folder import FolderGenerator
+from scripts.process.process import (SuricataExecution, SnortExecution, SPQRSimple)
+
+
 # Import du module CLI
 try:
     from spqr_cli import SPQRSimple

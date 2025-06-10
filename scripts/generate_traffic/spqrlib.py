@@ -448,3 +448,5 @@ class PcapGenerator:
 
         pkt_flat = [pkt for group in flow_gen.packets for pkt in group]  # aplatir
         PcapGenerator().save_to_pcap(output_file, pkt_flat)
+
+generate_pcap = PcapGenerator.generate_pcap

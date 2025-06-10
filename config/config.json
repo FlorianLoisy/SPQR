@@ -12,8 +12,8 @@
     "mode": "docker"
   },
   "suricata": {
-    "config_file": "config/suricata.yaml",
-    "rules_file": "config/suricata.rules",
+    "config_file": "config/suricata_6.0.15/suricata.yaml",
+    "rules_file": "config/suricata_6.0.15/suricata.rules",
     "log_dir": "output/logs"
   },
   "snort": {
