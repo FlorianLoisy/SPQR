@@ -11,6 +11,10 @@ import json
 import os
 from pathlib import Path
 import logging
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), "scripts", "generate_traffic"))
+from spqrlib import generate_pcap
+
 
 from scripts.generate_traffic.spqrlib import (
     PcapGenerator, FlowGenerator, generate_pcap

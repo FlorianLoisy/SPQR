@@ -31,4 +31,8 @@ def main():
         print(f"Rapport: {results.get('report_file', 'N/A')}")
 
 if __name__ == "__main__":
+<<<<<<< HEAD
     main()
+=======
+    main()
+>>>>>>> 33226148057da68856b71e95a7dfb22beb934863

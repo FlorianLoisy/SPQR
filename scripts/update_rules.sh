@@ -14,4 +14,8 @@ if command -v wget >/dev/null 2>&1; then
     echo "Règles mises à jour"
 else
     echo "wget non trouvé. Mise à jour manuelle nécessaire."
+<<<<<<< HEAD
 fi
+=======
+fi
+>>>>>>> 33226148057da68856b71e95a7dfb22beb934863
