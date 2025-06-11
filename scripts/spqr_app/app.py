@@ -41,9 +41,25 @@ def main():
                 try:
                     result = spqr_web.spqr.quick_test(attack_type)
                     st.session_state['last_result'] = result
-                    st.success("Test terminé avec succès!")
+                    if isinstance(result, dict):
+                        if 'pcap_file' in result:
+                            st.success(f"Test terminé avec succès! PCAP généré: {Path(result['pcap_file']).name}")
+                            # Add debug info
+                            st.info(f"Chemins utilisés:\n"
+                                    f"PCAP: {os.path.abspath(result['pcap_file'])}\n"
+                                    f"Logs: {os.path.abspath(result.get('log_file', 'N/A'))}")
+                        else:
+                            st.warning("Test terminé mais aucun fichier PCAP n'a été généré")
+                            st.write("Résultat:", result)
+                    else:
+                        st.error("Format de résultat inattendu")
+                        st.write("Résultat:", result)
                 except Exception as e:
                     st.error(f"Erreur: {str(e)}")
+                    # Add debug output
+                    st.error(f"Détails de l'erreur: {type(e).__name__}")
+                    import traceback
+                    st.code(traceback.format_exc())
 
     # Main Content
     st.title("SPQR Dashboard")
@@ -55,12 +71,12 @@ def main():
         st.subheader("🔍 Dernière analyse")
         if 'last_result' in st.session_state:
             result = st.session_state['last_result']
-            st.info(f"PCAP: {Path(result['pcap_file']).name}")
-            
-            # Display logs
-            if os.path.exists(result['log_file']):
-                with open(result['log_file'], 'r') as f:
-                    st.code(f.read())
+            if isinstance(result, dict):
+                if 'pcap_file' in result:
+                    st.info(f"PCAP: {Path(result['pcap_file']).name}")
+                if 'log_file' in result and os.path.exists(result['log_file']):
+                    with open(result['log_file'], 'r') as f:
+                        st.code(f.read())
     
     with col2:
         st.subheader("📊 Résultats historiques")

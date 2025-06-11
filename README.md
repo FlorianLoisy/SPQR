@@ -43,9 +43,11 @@ SPQR/
 │   ├── logs/                  # Logs des IDS
 │   ├── pcap/                 # Fichiers PCAP générés
 │   └── reports/              # Rapports d'analyse
-├── spqr_app/                 # Application Streamlit
-│   ├── app.py                # Interface web
-│   └── requirements.txt      # Dépendances Python
+├── scripts/
+│   ├── spqr_app/          
+│   ├── generate_traffic/
+│   ├── generate_path/
+│   └── process/
 ├── docker-compose.yml        # Configuration des services
 └── install_spqr.sh          # Script d'installation
 ```

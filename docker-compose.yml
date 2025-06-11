@@ -3,23 +3,20 @@ version: '3.8'
 services:
   streamlit:
     build: 
-      context: ./images_docker/Docker_Streamlit
-      dockerfile: Dockerfile
-      args:
-        - PYTHON_VERSION=3.11
+      context: .
+      dockerfile: images_docker/Docker_Streamlit/Dockerfile
     container_name: streamlit
     image: spqr_streamlit
     ports:
       - "8501:8501"
     volumes:
-      - ./spqr_app:/app/spqr_app:ro
+      - ./scripts:/app/scripts:ro
       - ./config:/app/config:ro
       - ./output:/app/output
+      - /var/run/docker.sock:/var/run/docker.sock  # Mount Docker socket
     environment:
-      - STREAMLIT_SERVER_PORT=8501
-      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
-      - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
       - PYTHONPATH=/app
+      - HOST_PWD=${PWD}  # Pass host working directory
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
       interval: 30s

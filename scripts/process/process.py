@@ -166,6 +166,41 @@ class SPQRSimple:
 
         return results
 
+    def process_pcap(self, pcap_path, config_path, rules_path, log_dir, mode="docker", version="6.0.15"):
+        # Convert relative paths to absolute
+        pcap_path = os.path.abspath(pcap_path)
+        config_path = os.path.abspath(config_path)
+        rules_path = os.path.abspath(rules_path)
+        log_dir = os.path.abspath(log_dir)
+
+        if mode == "docker":
+            image = f"spqr_suricata_{version}"
+            cmd = [
+                "docker", "run", "--rm",
+                "-v", f"{pcap_path}:/input.pcap:ro",
+                "-v", f"{config_path}:/etc/suricata/suricata.yaml:ro",
+                "-v", f"{rules_path}:/etc/suricata/suricata.rules:ro",
+                "-v", f"{log_dir}:/var/log/suricata",
+                image,
+                "suricata",
+                "-c", "/etc/suricata/suricata.yaml",
+                "-S", "/etc/suricata/suricata.rules",
+                "-r", "/input.pcap",
+                "-l", "/var/log/suricata"
+            ]
+            # Add debug output
+            print(f"Executing command: {' '.join(cmd)}")
+            return subprocess.run(cmd, check=True)
+        else:
+            cmd = [
+                "suricata",
+                "-c", str(config_path),
+                "-S", str(rules_path),
+                "-r", str(pcap_path),
+                "-l", str(log_dir)
+            ]
+            return subprocess.run(cmd, check=True)
+
 class SuricataExecution:
     def __init__(self):
         """
