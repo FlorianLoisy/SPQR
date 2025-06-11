@@ -55,7 +55,7 @@ setup_environment() {
     mkdir -p config/snort_2.9
     mkdir -p config/snort_3
     mkdir -p output/{logs,pcap,reports}
-    
+
     # Permissions
     chmod -R 755 output
 }
