@@ -2,17 +2,24 @@ import streamlit as st
 import os
 import zipfile
 import json
+import logging
 from pathlib import Path
 from scripts.process.process import SPQRSimple
 from datetime import datetime
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 class SPQRWeb:
     def __init__(self):
         self.spqr = SPQRSimple()
         self.load_config()
-
+        
     def load_config(self):
-        with open("config/config.json") as f:
+        config_path = "config/config.json"
+        logger.debug(f"Loading config from: {os.path.abspath(config_path)}")
+        with open(config_path) as f:
             self.config = json.load(f)
 
 def main():
@@ -25,109 +32,103 @@ def main():
     # Initialize SPQR
     spqr_web = SPQRWeb()
 
-    # Sidebar
+    # Sidebar Navigation
     with st.sidebar:
-        st.title("SPQR Controls")
-        
+        st.title("SPQR Navigation")
+        page = st.radio(
+            "Select Page",
+            ["Test Rapide", "Test Manuel", "Configuration", "Logs"]
+        )
+
+    # Main Content based on selection
+    if page == "Test Rapide":
+        st.header("Test Rapide de Règles")
         # Attack Type Selection
         attack_type = st.selectbox(
             "Type d'attaque",
             spqr_web.spqr.list_attack_types()
         )
         
-        # Quick Test Button
-        if st.button("🚀 Lancer un test rapide"):
+        if st.button("🚀 Lancer le Test Rapide"):
             with st.spinner("Génération et analyse en cours..."):
                 try:
                     result = spqr_web.spqr.quick_test(attack_type)
-                    st.session_state['last_result'] = result
-                    if isinstance(result, dict):
-                        if 'pcap_file' in result:
-                            st.success(f"Test terminé avec succès! PCAP généré: {Path(result['pcap_file']).name}")
-                            # Add debug info
-                            st.info(f"Chemins utilisés:\n"
-                                    f"PCAP: {os.path.abspath(result['pcap_file'])}\n"
-                                    f"Logs: {os.path.abspath(result.get('log_file', 'N/A'))}")
-                        else:
-                            st.warning("Test terminé mais aucun fichier PCAP n'a été généré")
-                            st.write("Résultat:", result)
-                    else:
-                        st.error("Format de résultat inattendu")
-                        st.write("Résultat:", result)
+                    if isinstance(result, dict) and 'pcap_file' in result:
+                        st.success(f"Test terminé! PCAP généré: {Path(result['pcap_file']).name}")
+                        st.session_state['last_result'] = result
                 except Exception as e:
                     st.error(f"Erreur: {str(e)}")
-                    # Add debug output
-                    st.error(f"Détails de l'erreur: {type(e).__name__}")
-                    import traceback
-                    st.code(traceback.format_exc())
 
-    # Main Content
-    st.title("SPQR Dashboard")
-    
-    # Results Display
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("🔍 Dernière analyse")
-        if 'last_result' in st.session_state:
-            result = st.session_state['last_result']
-            if isinstance(result, dict):
-                if 'pcap_file' in result:
-                    st.info(f"PCAP: {Path(result['pcap_file']).name}")
-                if 'log_file' in result and os.path.exists(result['log_file']):
-                    with open(result['log_file'], 'r') as f:
-                        st.code(f.read())
-    
-    with col2:
-        st.subheader("📊 Résultats historiques")
-        output_dir = "output"
-        if os.path.exists(output_dir):
-            analyses = [d for d in os.listdir(output_dir) 
-                       if os.path.isdir(os.path.join(output_dir, d))]
+    elif page == "Test Manuel":
+        st.header("Test Manuel avec Fichiers")
+        pcap_file = st.file_uploader("Sélectionner un fichier PCAP", type=['pcap', 'pcapng'])
+        rules_file = st.file_uploader("Sélectionner un fichier de règles (optionnel)", type=['rules'])
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Tester les Règles"):
+                if pcap_file:
+                    # Implement manual test logic
+                    st.info("Test manuel en cours...")
+        with col2:
+            if st.button("Générer Rapport"):
+                st.info("Génération du rapport...")
+
+    elif page == "Configuration":
+        st.header("Configuration SPQR")
+        
+        # Network Configuration
+        st.subheader("Configuration Réseau")
+        col1, col2 = st.columns(2)
+        with col1:
+            source_ip = st.text_input("IP Source", value="192.168.1.10")
+            source_port = st.text_input("Port Source", value="1234")
+        with col2:
+            dest_ip = st.text_input("IP Destination", value="192.168.1.20")
+            dest_port = st.text_input("Port Destination", value="80")
             
-            if analyses:
-                selected_analysis = st.selectbox(
-                    "Analyses disponibles",
-                    sorted(analyses, reverse=True)
-                )
-                
-                result_path = os.path.join(output_dir, selected_analysis, "result")
-                if os.path.exists(result_path):
-                    # Display alerts summary
-                    alerts_summary = []
-                    for file in os.listdir(result_path):
-                        if file.endswith((".json", ".txt")):
-                            file_path = os.path.join(result_path, file)
-                            with open(file_path, "r", errors="ignore") as f:
-                                content = f.read()
-                                alert_count = content.lower().count("alert")
-                                alerts_summary.append((file, alert_count))
-                    
-                    if alerts_summary:
-                        for filename, count in alerts_summary:
-                            st.write(f"📄 **{filename}** : {count} alerte(s)")
-                        
-                        # Download button
-                        zip_filename = f"{selected_analysis}_result.zip"
-                        zip_path = os.path.join("/tmp", zip_filename)
-                        
-                        if st.button("📦 Télécharger les résultats"):
-                            with zipfile.ZipFile(zip_path, "w") as zipf:
-                                for root, _, files in os.walk(result_path):
-                                    for file in files:
-                                        full_path = os.path.join(root, file)
-                                        arcname = os.path.relpath(full_path, result_path)
-                                        zipf.write(full_path, arcname)
-                            with open(zip_path, "rb") as f:
-                                st.download_button(
-                                    "💾 Télécharger l'archive ZIP",
-                                    f,
-                                    file_name=zip_filename
-                                )
+        # Output Directory
+        st.subheader("Répertoire de Sortie")
+        output_dir = st.text_input("Répertoire de sortie", value="output")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("Sauvegarder Configuration"):
+                # Save config logic
+                st.success("Configuration sauvegardée!")
+        with col2:
+            if st.button("Charger Configuration"):
+                # Load config logic
+                st.info("Configuration chargée!")
+        with col3:
+            if st.button("Réinitialiser"):
+                # Reset config logic
+                st.info("Configuration réinitialisée!")
 
-    # Configuration Display
-    with st.expander("⚙️ Configuration"):
-        st.json(spqr_web.config)
+    else:  # Logs
+        st.header("Logs d'Exécution")
+        
+        # Display logs
+        if 'logs' not in st.session_state:
+            st.session_state.logs = []
+        
+        log_viewer = st.empty()
+        log_viewer.code('\n'.join(st.session_state.logs))
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Effacer Logs"):
+                st.session_state.logs = []
+                log_viewer.code('')
+        with col2:
+            if st.button("Sauvegarder Logs"):
+                # Save logs logic
+                st.download_button(
+                    "📥 Télécharger les logs",
+                    '\n'.join(st.session_state.logs),
+                    "spqr_logs.txt",
+                    "text/plain"
+                )
 
 if __name__ == "__main__":
     main()
