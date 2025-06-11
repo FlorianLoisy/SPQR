@@ -1,170 +1,123 @@
 #!/bin/bash
 
-# SPQR - Script d'Installation et Configuration
-# Ce script automatise l'installation et la configuration de SPQR
-
-set -e  # Arrêter en cas d'erreur
-
-# Couleurs pour l'affichage
-RED='\033[0;31m'
+# Couleurs pour les messages
 GREEN='\033[0;32m'
+RED='\033[0;31m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Fonction pour afficher les messages
-print_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+# Fonction de log
+log() {
+    echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')] $1${NC}"
 }
 
-print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+error() {
+    echo -e "${RED}[ERROR] $1${NC}"
+    exit 1
 }
 
-print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+warn() {
+    echo -e "${YELLOW}[WARNING] $1${NC}"
 }
 
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-# Fonction pour vérifier si une commande existe
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
-
-# Cloner le projet s'il n'existe pas encore
-if [ ! -d "SPQR" ]; then
-    echo "[INFO] Clonage du dépôt SPQR..."
-    git clone https://github.com/FlorianLoisy/SPQR.git SPQR
-    cd SPQR
-else
-    echo "[INFO] Le dossier SPQR existe déjà. Passage dans ce dossier..."
-    cd SPQR
-fi
-
-# Fonction pour installer les dépendances Python
-install_python_deps() {
-    print_info "Installation des dépendances Python..."
-
-    # Créer le fichier requirements.txt
-    cat > requirements.txt << EOF
-scapy>=2.4.5
-python-json-logger>=2.0.0
-tkinter-tooltip>=1.0.0
-requests>=2.25.0
-pandas>=1.3.0
-matplotlib>=3.5.0
-argparse>=1.4.0
-pathlib>=1.0.0
-EOF
-
-    # Installer les dépendances
-    if command_exists pip3; then
-        pip3 install -r requirements.txt
-    elif command_exists pip; then
-        pip install -r requirements.txt
-    else
-        print_error "pip non trouvé. Veuillez installer pip."
-        exit 1
-    fi
-
-    print_success "Dépendances Python installées"
-
-    # Installer tkinter selon la distribution
-    print_info "Vérification de tkinter (GUI)..."
-    if command_exists apt-get; then
-        sudo apt-get install -y python3-tk
-    elif command_exists dnf; then
-        sudo dnf install -y python3-tkinter
-    elif command_exists pacman; then
-        sudo pacman -S --noconfirm tk
-    else
-        print_warning "Gestionnaire de paquets inconnu : veuillez installer tkinter manuellement si besoin."
-    fi
-}
-
-# Fonction pour construire les images Docker IDS
-install_ids_engines() {
-    print_info "Construction des images Docker IDS (Suricata & Snort)..."
-
-    if [ -f "images_docker/install_docker.sh" ]; then
-        bash images_docker/install_docker.sh
-        print_success "Images Docker IDS construites avec succès"
-    else
-        print_warning "Script install_docker.sh introuvable. Construction manuelle nécessaire."
-    fi
-}
-
-
-# Ajout des droit en execution des fichiers .sh .py
+# Vérification des prérequis
+check_prerequisites() {
+    log "Vérification des prérequis..."
     
-chmod +x spqr_launch.sh
-chmod +x scripts/update_rules.sh
-chmod +x example_test.py
+    # Vérifier Docker
+    if ! command -v docker &> /dev/null; then
+        error "Docker n'est pas installé. Installation..."
+        curl -fsSL https://get.docker.com -o get-docker.sh
+        sudo sh get-docker.sh
+        sudo usermod -aG docker $USER
+        warn "Veuillez vous déconnecter et vous reconnecter pour utiliser Docker sans sudo"
+    fi
 
-
-# Fonction pour afficher les informations finales
-show_final_info() {
-    echo ""
-    echo "============================================"
-    print_success "Installation SPQR terminée avec succès!"
-    echo "============================================"
-    echo ""
-    echo "Pour commencer à utiliser SPQR:"
-    echo ""
-    echo "1. Lancement rapide:"
-    echo "   ./spqr_launch.sh"
-    echo ""
-    echo "2. Interface graphique:"
-    echo "   python3 spqr_gui.py"
-    echo ""
-    echo "3. Ligne de commande:"
-    echo "   python3 spqr_cli.py --help"
-    echo ""
-    echo "4. Test rapide:"
-    echo "   python3 spqr_cli.py quick web_attack"
-    echo ""
-    echo "5. Exemple programmatique:"
-    echo "   python3 example_test.py"
-    echo ""
-    echo "Fichiers importants:"
-    echo "  - config/config.json      : Configuration principale"
-    echo "  - config/suricata.rules   : Règles de détection"
-    echo "  - output/                 : Résultats des tests"
-    echo ""
-    echo "Documentation: Consultez le README.md pour plus d'informations"
-    echo ""
-}
-
-# Fonction principale
-main() {
-    echo "============================================"
-    echo "    SPQR - Installation et Configuration"
-    echo "============================================"
-    echo ""
+    # Vérifier Docker Compose
+    if ! command -v docker compose &> /dev/null; then
+        error "Docker Compose n'est pas installé"
+        sudo apt-get update && sudo apt-get install -y docker-compose-plugin
+    fi
 
     # Vérifier Python
-    if ! command_exists python3; then
-        print_error "Python 3 n'est pas installé. Veuillez l'installer avant de continuer."
-        exit 1
+    if ! command -v python3 &> /dev/null; then
+        error "Python 3 n'est pas installé"
+        sudo apt-get update && sudo apt-get install -y python3 python3-pip
     fi
-
-    print_info "Python 3 détecté: $(python3 --version)"
-
-    # Étapes d'installation
-    install_python_deps
-    install_ids_engines             # <== Ajouté ici
-    create_directory_structure
-    create_config_files
-    create_helper_scripts
-    create_test_example
-
-    show_final_info
 }
 
-# Vérifier si le script est exécuté directement
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    main "$@"
-fi
+# Préparation de l'environnement
+setup_environment() {
+    log "Préparation de l'environnement..."
+    
+    # Création des dossiers nécessaires
+    mkdir -p config/suricata_6.0.15
+    mkdir -p config/snort_2.9
+    mkdir -p config/snort_3
+    mkdir -p output/{logs,pcap,reports}
+    
+    # Permissions
+    chmod -R 755 output
+}
+
+# Construction des images Docker
+build_images() {
+    log "Construction des images Docker..."
+    
+    # Construction de toutes les images
+    docker compose build || error "Erreur lors de la construction des images"
+    
+    # Vérification des images
+    expected_images=("spqr_streamlit" "spqr_suricata:6.0.15" "spqr_suricata:7.0.2" "spqr_snort:2.9" "spqr_snort:3")
+    for img in "${expected_images[@]}"; do
+        docker image inspect $img >/dev/null 2>&1 || error "Image $img non trouvée"
+    done
+}
+
+# Test de fonctionnement
+test_installation() {
+    log "Test de l'installation..."
+    
+    # Démarrage des services
+    docker compose up -d
+    
+    # Attente du démarrage de Streamlit
+    sleep 10
+    
+    # Test de l'interface web
+    if curl -s http://localhost:8501 > /dev/null; then
+        log "Interface web accessible sur http://localhost:8501"
+    else
+        error "Interface web non accessible"
+    fi
+    
+    # Test rapide avec Suricata
+    docker compose exec -T suricata6015 suricata -V || error "Suricata test failed"
+}
+
+# Nettoyage
+cleanup() {
+    log "Nettoyage..."
+    docker compose down
+    docker system prune -f
+}
+
+# Menu principal
+main() {
+    log "Installation de SPQR..."
+    
+    check_prerequisites
+    setup_environment
+    build_images
+    test_installation
+    
+    log "Installation terminée avec succès!"
+    log "Accédez à l'interface via: http://localhost:8501"
+}
+
+# Gestion des erreurs
+set -e
+trap 'error "Une erreur est survenue. Nettoyage..."' ERR
+
+# Exécution
+main "$@"

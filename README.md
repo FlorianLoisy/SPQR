@@ -1,231 +1,111 @@
-# SPQR - Network Rules Testing Tool 🛡️
+# SPQR - Network Rules Testing Tool
 
-**SPQR** est un outil simplifié pour tester et valider les règles de détection réseau avec Suricata, Snort 2 et Snort 3, incluant un support natif des conteneurs Docker. Fini les notebooks complexes - utilisez SPQR avec une interface claire, des scripts automatisés, et un mode multi-IDS !
+SPQR est une solution d'analyse de trafic réseau utilisant plusieurs IDS (Suricata et Snort) dans des conteneurs Docker avec une interface web Streamlit.
 
-## 🚀 Installation Rapide
+## Prérequis
 
-### Méthode 1 : Installation Automatique (Recommandée)
+- Linux (testé sur Ubuntu 22.04)
+- Docker
+- Docker Compose
+- Python 3.11+
+- Curl
+
+## Installation rapide
+
 ```bash
-# Télécharger et exécuter le script d'installation
-wget https://raw.githubusercontent.com/FlorianLoisy/SPQR/main/install_spqr.sh
+# Cloner le dépôt
+git clone https://github.com/votre-repo/SPQR.git
+cd SPQR
+
+# Lancer l'installation automatique
 chmod +x install_spqr.sh
 ./install_spqr.sh
 ```
 
-### Méthode 2 : Installation Manuelle
+L'interface web sera accessible sur : http://localhost:8501
 
-```bash
-# Cloner le projet
-git clone https://github.com/FlorianLoisy/SPQR.git
-cd SPQR
+## Structure du projet
 
-# Installer les dépendances Python
-pip3 install -r requirements.txt
-
-# Vérifier que Docker est installé, sinon exécuter :
-cd images_docker
-chmod +x install_docker.sh
-./install_docker.sh
-cd ..
-
-# Donner les droits Docker à l'utilisateur si nécessaire
-sudo usermod -aG docker $USER
-newgrp docker
-
-# Génération des images docker 
-cd images_docker
-chmod +x build_all_images.sh
-./build_all_images.sh
-
-# Lancer SPQR
-python3 spqr_cli.py --help
-```
-
-#### 📦 Exemple d'exécution manuelle d'un moteur Docker
-
-```bash
-# Exécuter un test avec Suricata 6 en conteneur (exemple)
-docker run --rm -v $(pwd)/output/pcap:/data -v $(pwd)/config:/config -v $(pwd)/output/logs:/logs spqr/suricata-6 \
-  -c /config/suricata.yaml -S /config/suricata.rules -r /data/web_attack_test.pcap -l /logs --runmode single
-```
-
-> Remplace `spqr/suricata-6` par le nom de ton image (ex: `spqr_suricata_6.0.15`) et adapte les chemins si nécessaire.
-
-- Interface simple avec onglets
-- Test rapide en un clic
-- Configuration visuelle
-- Visualisation des résultats
-
-### ⚡ Lancement Rapide
-```bash
-./spqr_launch.sh
-```
-Menu interactif pour choisir votre mode d'utilisation.
-
-### 💻 Ligne de Commande (Pour les Experts)
-
-#### Test Rapide Complet
-```bash
-# Test d'attaque web
-python3 spqr_cli.py quick web_attack
-
-# Test de malware C2
-python3 spqr_cli.py quick malware_c2
-
-# Test d'exfiltration de données
-python3 spqr_cli.py quick data_exfiltration
-```
-
-#### Tests avec Plusieurs IDS
-```bash
-# Tester un PCAP contre tous les moteurs définis dans config.json
-python3 spqr_cli.py test-all output/pcap/example.pcap
-```
-
-#### Opérations Individuelles
-```bash
-# Lister les types d'attaques disponibles
-python3 spqr_cli.py list
-
-# Générer seulement du trafic
-python3 spqr_cli.py generate web_attack
-
-# Tester avec un fichier PCAP existant
-python3 spqr_cli.py test input/malware_sample.pcap
-
-# Générer un rapport depuis les logs
-python3 spqr_cli.py report output/logs/eve.json
-```
-
-#### Options Avancées
-```bash
-# Utiliser une configuration personnalisée
-python3 spqr_cli.py quick web_attack --config custom_config.json
-
-# Spécifier un fichier de sortie
-python3 spqr_cli.py generate malware_c2 --output custom_malware.pcap
-
-# Utiliser des règles personnalisées
-python3 spqr_cli.py test malware.pcap --rules custom_rules.rules
-
-# Mode verbeux
-python3 spqr_cli.py quick web_attack --verbose
-```
-
-## 📁 Structure du Projet
 ```
 SPQR/
-├── spqr_cli.py          # Interface ligne de commande
-├── spqr_gui.py          # Interface graphique
-├── spqr_launch.sh       # Script de lancement rapide
-├── example_test.py      # Exemple d'utilisation
-│
-├── config/
-│   ├── config.json      # Configuration principale
-│   ├── suricata.yaml    # Configuration Suricata
-│   └── suricata.rules   # Règles de détection
-│
-├── input/               # Fichiers PCAP d'entrée
-├── output/
-│   ├── pcap/            # Trafic généré
-│   ├── logs/            # Logs Suricata/Snort
-│   └── reports/         # Rapports générés
-│
-├── images_docker/       # Conteneurs Docker IDS (Suricata/Snort)
-└── scripts/
-    ├── generate_traffic/
-    └── update_rules.sh  # Mise à jour des règles
+├── config/                     # Configurations
+│   ├── suricata_6.0.15/       # Config Suricata 6.0.15
+│   ├── suricata_7.0.2/        # Config Suricata 7.0.2
+│   ├── snort_2.9/             # Config Snort 2.9
+│   └── snort_3/               # Config Snort 3
+├── images_docker/             # Dockerfiles
+│   ├── Docker_Streamlit/      # Image Streamlit
+│   ├── Docker_Suricata-6.0.15/
+│   ├── Docker_Suricata-7.0.2/
+│   ├── Docker_Snort-2.9/
+│   └── Docker_Snort-3/
+├── output/                    # Sorties
+│   ├── logs/                  # Logs des IDS
+│   ├── pcap/                 # Fichiers PCAP générés
+│   └── reports/              # Rapports d'analyse
+├── spqr_app/                 # Application Streamlit
+│   ├── app.py                # Interface web
+│   └── requirements.txt      # Dépendances Python
+├── docker-compose.yml        # Configuration des services
+└── install_spqr.sh          # Script d'installation
 ```
 
-## 🌟 Fonctionnalités Spéciales
+## Utilisation manuelle
 
-- ✅ **Support Multi-IDS** : Suricata 6, Suricata 7, Snort 2.9, Snort 3 via Docker
-- ✅ **Mode test-all** : compare les résultats de plusieurs IDS en un seul appel
-- ✅ **Structure modulaire** : facile à étendre pour d'autres moteurs ou scénarios
+Si vous préférez gérer les services manuellement :
 
-## 🔧 Configuration
-
-### Configuration Multi-IDS (`config/config.json`)
-```json
-{
-  "network": {
-    "source_ip": "192.168.1.10",
-    "dest_ip": "192.168.1.20",
-    "source_port": 1234,
-    "dest_port": 80
-  },
-  "suricata": {
-    "config_file": "config/suricata.yaml",
-    "rules_file": "config/suricata.rules",
-    "log_dir": "output/logs"
-  },
-  "output": {
-    "pcap_dir": "output/pcap",
-    "reports_dir": "output/reports"
-  },
-  "engines": [
-    {"type": "suricata", "version": "6.0.15", "mode": "docker"},
-    {"type": "suricata", "version": "7.0.2", "mode": "docker"},
-    {"type": "snort", "version": "2.9", "mode": "docker"},
-    {"type": "snort", "version": "3", "mode": "docker"}
-  ]
-}
-```
-
-### Ajout de Règles
 ```bash
-# Ajouter une règle manuellement
-echo 'alert tcp any any -> any 8080 (msg:"Custom Rule"; sid:2000001;)' >> config/suricata.rules
+# Construire les images
+docker compose build
 
-# Mise à jour automatique
-./scripts/update_rules.sh
+# Démarrer tous les services
+docker compose up -d
+
+# Démarrer uniquement l'interface web
+docker compose up -d streamlit
+
+# Arrêter les services
+docker compose down
 ```
 
-## 📊 Exemples Multi-IDS
+## Services disponibles
 
-### Comparaison Suricata vs Snort
+- **Streamlit** : Interface web (port 8501)
+- **Suricata 6.0.15** : IDS principal
+- **Suricata 7.0.2** : IDS secondaire
+- **Snort 2.9** : IDS complémentaire
+- **Snort 3** : IDS expérimental
+
+## Développement
+
+Pour contribuer au projet :
+
+1. Fork le dépôt
+2. Créez une branche pour votre fonctionnalité
+3. Committez vos changements
+4. Poussez vers la branche
+5. Ouvrez une Pull Request
+
+## Troubleshooting
+
+En cas de problème :
+
+1. Vérifiez les logs :
 ```bash
-python3 spqr_cli.py test-all output/pcap/web_attack_test.pcap
-
-# Résultat
-=== RÉSULTATS MULTI-IDS ===
---- suricata_6.0.15 ---
-Log : output/logs/suricata_6.0.15/eve.json
-Rapport : output/reports/suricata_6.0.15/report_*.txt
-
---- snort_3 ---
-Log : output/logs/snort_3/alert.fast
-Rapport : output/reports/snort_3/report_*.txt
+docker compose logs -f
 ```
 
-## 🔎 Dépannage & Astuces
+2. Redémarrez les services :
+```bash
+docker compose restart
+```
 
-- **Erreur Docker : permission denied**
-  ```bash
-  sudo usermod -aG docker $USER
-  newgrp docker
-  ```
-
-- **Erreur sur Suricata non trouvé**
-  ```bash
-  sudo apt-get install suricata
-  ```
-
-- **Installer les dépendances Python**
-  ```bash
-  pip3 install -r requirements.txt
-  ```
-
-- **Afficher les logs**
-  ```bash
-  tail -f output/logs/suricata.log
-  ```
-
-## 🏆 Contribuer
-
-- Forkez le projet
-- Ajoutez vos règles ou moteurs IDS
-- Proposez des Pull Requests
+3. Reconstruction complète :
+```bash
+docker compose down -v
+docker compose build --no-cache
+docker compose up -d
+```
 
 ---
 
