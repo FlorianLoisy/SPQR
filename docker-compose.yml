@@ -55,7 +55,10 @@ services:
       - ./output:/data/output
 
   snort3:
-    image: ciscotalos/snort3
+    build:
+      context: ./images_docker/Docker_Snort-3
+      dockerfile: Dockerfile
+    image: spqr_snort_3
     container_name: snort3
     volumes:
       - ./config:/data/config:ro
