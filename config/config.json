@@ -70,6 +70,22 @@
         "source_port": "random",
         "destination_port": 443
       }
+    },
+    "http_default": {
+      "description": "Trafic HTTP standard",
+      "payload_type": "http"
+    },
+    "dns_default": {
+      "description": "Trafic DNS standard",
+      "payload_type": "dns"
+    },
+    "icmp_default": {
+      "description": "Trafic ICMP standard",
+      "payload_type": "icmp"
+    },
+    "quic_default": {
+      "description": "Trafic QUIC standard",
+      "payload_type": "quic"
     }
   },
   "http": {

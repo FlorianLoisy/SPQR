@@ -10,19 +10,9 @@
     "body": ""
   },
   "attacks": {
-    "web_attack": {
-      "method": "POST",
-      "path": "/login",
-      "body": "username=admin&password=123456"
-    },
-    "data_exfiltration": {
-      "method": "POST",
-      "path": "/upload",
-      "body": "data=sensitive_information"
-    },
-    "malware_c2": {
-      "path": "/command",
-      "user_agent": "MalwareBot/1.0"
+    "http_default": {
+      "description": "Trafic HTTP normal",
+      "parameters": {}
     }
   }
 }

@@ -61,12 +61,86 @@ def show_pcap_generation():
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        # Sélection du type d'attaque
-        attack_type = st.selectbox(
-            "Type de trafic à générer",
-            spqr_web.spqr.list_attack_types(),
-            help="Sélectionnez le type de trafic que vous souhaitez générer"
+        # Regrouper les types de trafic par catégorie
+        traffic_types = spqr_web.spqr.list_attack_types()
+        default_types = [t for t in traffic_types if t.endswith("_default")]
+        attack_types = [t for t in traffic_types if not t.endswith("_default")]
+        
+        # Sélection du type de trafic
+        traffic_category = st.radio(
+            "Catégorie de trafic",
+            ["Trafic personnalisé", "Trafic malveillant"],
+            help="Choisissez entre du trafic normal ou des simulations d'attaque"
         )
+        
+        if traffic_category == "Trafic personnalisé":
+            attack_type = st.selectbox(
+                "Type de trafic à générer",
+                default_types,
+                format_func=lambda x: x.replace("_default", "").upper(),
+                help="Sélectionnez le protocole de base à générer"
+            )
+
+            # Configuration du protocole
+            protocol_type = spqr_web.config["traffic_patterns"][attack_type].get("payload_type", "http")
+            protocol_config = spqr_web.protocol_configs[protocol_type]
+
+            # Interface de configuration du protocole personnalisé
+            with st.expander(f"Configuration {protocol_type.upper()}", expanded=True):
+                edited_config = {}
+                
+                # Utiliser des onglets pour séparer les configurations
+                basic_tab, advanced_tab = st.tabs(["Configuration de base", "Paramètres avancés"])
+                
+                with basic_tab:
+                    st.markdown("#### Configuration des paquets")
+                    # Afficher et permettre l'édition de tous les paramètres par défaut
+                    for key, value in protocol_config["default"].items():
+                        edited_config[key] = _display_config_input(
+                            key, 
+                            value,
+                            help=f"Modifier la valeur de {key} pour les paquets générés"
+                        )
+                
+                with advanced_tab:
+                    # Options spécifiques au protocole
+                    if protocol_type == "http":
+                        st.markdown("#### Configuration HTTP avancée")
+                        edited_config["custom_headers"] = st.text_area(
+                            "En-têtes personnalisés (JSON)",
+                            value=json.dumps(protocol_config["default"].get("custom_headers", {}), indent=2),
+                            help="Ajouter des en-têtes HTTP personnalisés au format JSON"
+                        )
+                    elif protocol_type == "dns":
+                        st.markdown("#### Configuration DNS avancée")
+                        edited_config["query_type"] = st.selectbox(
+                            "Type de requête DNS",
+                            ["A", "AAAA", "MX", "TXT", "CNAME"],
+                            help="Sélectionner le type de requête DNS"
+                        )
+                    elif protocol_type == "icmp":
+                        st.markdown("#### Configuration ICMP avancée")
+                        edited_config["payload_size"] = st.number_input(
+                            "Taille du payload (octets)",
+                            min_value=0,
+                            max_value=1400,
+                            value=56,
+                            help="Définir la taille du payload ICMP"
+                        )
+                    elif protocol_type == "quic":
+                        st.markdown("#### Configuration QUIC avancée")
+                        edited_config["version"] = st.selectbox(
+                            "Version QUIC",
+                            ["1", "2"],
+                            help="Sélectionner la version du protocole QUIC"
+                        )
+
+        else:
+            attack_type = st.selectbox(
+                "Type de trafic à générer",
+                attack_types,
+                help="Sélectionnez le type d'attaque à simuler"
+            )
         
         # Description du type sélectionné
         if attack_type in spqr_web.config["traffic_patterns"]:
@@ -107,9 +181,9 @@ def show_pcap_generation():
                 return
 
     with col2:
-        # Paramètres réseau
         st.subheader("Paramètres réseau")
         try:
+            # Paramètres de base pour tous les protocoles
             network_config = {
                 "src_ip": st.text_input(
                     "IP Source",
@@ -118,16 +192,40 @@ def show_pcap_generation():
                 "dst_ip": st.text_input(
                     "IP Destination",
                     value=spqr_web.config["network"].get("dest_ip", "192.168.1.20")
-                ),
-                "src_port": st.number_input(
-                    "Port Source",
-                    value=int(spqr_web.config["network"].get("source_port", 1234))
-                ),
-                "dst_port": st.number_input(
-                    "Port Destination",
-                    value=int(spqr_web.config["network"].get("dest_port", 80))
                 )
             }
+
+            # Paramètres spécifiques au protocole
+            if protocol_type == "icmp":
+                # Ajout des adresses MAC pour ICMP
+                network_config.update({
+                    "src_mac": st.text_input(
+                        "MAC Source (optionnel)",
+                        value="",
+                        help="Format: 00:11:22:33:44:55"
+                    ),
+                    "dst_mac": st.text_input(
+                        "MAC Destination (optionnel)",
+                        value="",
+                        help="Format: 00:11:22:33:44:55"
+                    )
+                })
+                # Supprimer les ports s'ils existent
+                network_config.pop("src_port", None)
+                network_config.pop("dst_port", None)
+            else:
+                # Ajouter les ports pour les autres protocoles
+                network_config.update({
+                    "src_port": st.number_input(
+                        "Port Source",
+                        value=int(spqr_web.config["network"].get("source_port", 1234))
+                    ),
+                    "dst_port": st.number_input(
+                        "Port Destination",
+                        value=int(spqr_web.config["network"].get("dest_port", 80))
+                    )
+                })
+
         except Exception as e:
             logger.error(f"Error in network configuration: {str(e)}")
             st.error(f"Erreur de configuration réseau: {str(e)}")
@@ -135,11 +233,35 @@ def show_pcap_generation():
 
         # Options de génération
         st.subheader("Options")
-        options = {
-            "packet_count": st.number_input("Nombre de paquets", 1, 1000, 10),
-            "time_interval": st.slider("Intervalle (ms)", 0, 1000, 100)
+        options = {}
+        
+        # Définir quels protocoles utilisent quelles options
+        protocol_options = {
+            "http": ["packet_count", "time_interval"],
+            "dns": ["packet_count"],
+            "icmp": ["packet_count"],
+            "quic": ["time_interval"]
         }
-    
+        
+        # Afficher uniquement les options pertinentes pour le protocole
+        if "packet_count" in protocol_options.get(protocol_type, []):
+            options["packet_count"] = st.number_input(
+                "Nombre de paquets", 
+                1, 1000, 10,
+                help="Nombre de paquets à générer"
+            )
+            
+        if "time_interval" in protocol_options.get(protocol_type, []):
+            options["time_interval"] = st.slider(
+                "Intervalle (ms)", 
+                0, 1000, 100,
+                help="Intervalle entre les paquets"
+            )
+        
+        # Si aucune option n'est définie, utiliser les valeurs par défaut
+        if not options:
+            options = {"packet_count": 1}
+
     # Bouton de génération
     if st.button("🚀 Générer PCAP"):
         with st.spinner("Génération du fichier PCAP en cours..."):
@@ -201,16 +323,24 @@ def show_pcap_generation():
                 logger.exception("Error during PCAP generation")
                 st.error(f"❌ Erreur: {str(e)}")
 
-def _display_config_input(key: str, value: Any) -> Any:
-    """Affiche le widget approprié selon le type de valeur"""
+def _display_config_input(key: str, value: Any, help: str = "") -> Any:
+    """Affiche le widget approprié selon le type de valeur avec aide contextuelle"""
     if isinstance(value, bool):
-        return st.checkbox(key, value)
+        return st.checkbox(key, value, help=help)
     elif isinstance(value, int):
-        return st.number_input(key, value=value)
+        return st.number_input(key, value=value, help=help)
     elif isinstance(value, dict):
-        return st.json(value)
+        try:
+            return json.loads(st.text_area(
+                key,
+                value=json.dumps(value, indent=2),
+                help=help
+            ))
+        except json.JSONDecodeError:
+            st.error(f"Format JSON invalide pour {key}")
+            return value
     else:
-        return st.text_input(key, str(value))
+        return st.text_input(key, str(value), help=help)
 
 def show_protocol_config():
     st.header("⚙️ Configuration des Protocoles")
