@@ -32,6 +32,63 @@ class SPQRWeb:
             {"type": "snort", "version": "3"}
         ])
 
+def show_pcap_generation():
+    st.header("🔰 Générateur de PCAP")
+    
+    # Layout en colonnes
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        # Sélection du type d'attaque
+        attack_type = st.selectbox(
+            "Type de trafic à générer",
+            spqr_web.spqr.list_attack_types(),
+            help="Sélectionnez le type de trafic que vous souhaitez générer"
+        )
+        
+        # Afficher la description du type sélectionné
+        if attack_type in spqr_web.config["traffic_patterns"]:
+            st.info(spqr_web.config["traffic_patterns"][attack_type]["description"])
+    
+    with col2:
+        # Paramètres réseau
+        st.subheader("Paramètres réseau")
+        src_ip = st.text_input(
+            "IP Source",
+            value=spqr_web.config["network"]["source_ip"]
+        )
+        dst_ip = st.text_input(
+            "IP Destination",
+            value=spqr_web.config["network"]["dest_ip"]
+        )
+        
+    # Bouton de génération
+    if st.button("🚀 Générer PCAP"):
+        with st.spinner("Génération du fichier PCAP en cours..."):
+            try:
+                result = spqr_web.spqr.generate_pcap(attack_type)
+                if isinstance(result, dict) and 'pcap_file' in result:
+                    pcap_path = Path(result['pcap_file'])
+                    st.success(f"✅ PCAP généré avec succès!")
+                    
+                    # Afficher les détails du fichier
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Taille", f"{pcap_path.stat().st_size / 1024:.2f} KB")
+                    with col2:
+                        st.metric("Date", datetime.fromtimestamp(pcap_path.stat().st_mtime).strftime('%H:%M:%S'))
+                    with col3:
+                        st.download_button(
+                            "📥 Télécharger PCAP",
+                            data=pcap_path.read_bytes(),
+                            file_name=pcap_path.name,
+                            mime="application/vnd.tcpdump.pcap"
+                        )
+                else:
+                    st.error("❌ Erreur lors de la génération du PCAP")
+            except Exception as e:
+                st.error(f"❌ Erreur: {str(e)}")
+
 def main():
     st.set_page_config(
         page_title="SPQR - Security Package for Quick Response",
@@ -40,18 +97,21 @@ def main():
     )
 
     # Initialize SPQR
+    global spqr_web
     spqr_web = SPQRWeb()
 
     # Sidebar Navigation
     with st.sidebar:
         st.title("SPQR Navigation")
         page = st.radio(
-            "Select Page",
-            ["Test Rapide", "Test Manuel", "Configuration", "Logs"]
+            "Sélectionner une fonction",
+            ["Génération PCAP", "Test Rapide", "Test Manuel", "Configuration", "Logs"]
         )
 
     # Main Content based on selection
-    if page == "Test Rapide":
+    if page == "Génération PCAP":
+        show_pcap_generation()
+    elif page == "Test Rapide":
         st.header("Test Rapide de Règles")
         
         col1, col2 = st.columns([2, 1])

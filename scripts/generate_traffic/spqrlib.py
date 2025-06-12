@@ -1,16 +1,13 @@
 import json
 from scapy.all import *
-conf.verb = 0
+import random
+import struct
+from typing import List
 
-"""
-Ce fichier contient les class et fonctions permettant la génération automatique de fichier de capture réseau.
-Il s'appuie sur l'outil SCAPY.
-Pour personnaliser les pattern présent dans les flux réseau, veuillez modifier le fichier /spqr/config/config.json
-"""
-
-with open("config/config.json", "r") as config_file:
-    config_data = json.load(config_file)
-
+from .protocols.http_generator import HTTPGenerator, HTTPConfig
+from .protocols.dns_generator import DNSGenerator, DNSConfig
+from .protocols.icmp_generator import ICMPGenerator, ICMPConfig
+from .protocols.quic_generator import QUICGenerator, QUICConfig
 
 class FlowGenerator:
     """
@@ -20,13 +17,15 @@ class FlowGenerator:
      - packets (list): Liste des paquets générés.
     """
 
-    def __init__(self):
+    def __init__(self, config: dict):
         """
         Initialise une instance de FlowGenerator.
 
         Parameters:
 
         """
+        self.config = config
+        self.packets = []
 
     def generate_tcp_handshake(self, src_ip, dst_ip, src_port, dst_port):
         tcp_config = config_data["tcp"]
@@ -251,36 +250,66 @@ class FlowGenerator:
         """
         Génère une communication ICMP et l'ajoute à la liste des paquets.
         """
-        icmp_config = config_data["icmp"]
-        src_ip = icmp_config["DEFAULT_SRC_IP"]
-        dst_ip = icmp_config["DEFAULT_DST_IP"]
-        nbre_ping = int(icmp_config["DEFAULT_NBRE_PING"])
-        icmp_data = icmp_config["DEFAULT_ICMP_DATA"]
-    
-        src_mac = "02:42:ac:11:00:02"  # Replace with appropriate MAC addresses
-        dst_mac = "02:42:ac:11:00:03"  # Replace with appropriate MAC addresses
-    
-        if icmp_data is not None and not isinstance(icmp_data, bytes):
-            icmp_data = icmp_data.encode()
+        config = ICMPConfig(
+            src_ip=src_ip or self.config["icmp"]["DEFAULT_SRC_IP"],
+            dst_ip=dst_ip or self.config["icmp"]["DEFAULT_DST_IP"],
+            icmp_data=icmp_data or self.config["icmp"]["DEFAULT_ICMP_DATA"],
+            nbre_ping=int(self.config["icmp"]["DEFAULT_NBRE_PING"])
+        )
+        generator = ICMPGenerator(config)
+        self.packets.extend(generator.generate_ping())
 
-        for seq in range(1, nbre_ping + 1):
-            icmp_request = (
-                Ether(src=src_mac, dst=dst_mac)
-                / IP(src=src_ip, dst=dst_ip)
-                / ICMP(type="echo-request", id=12345, seq=seq)
-                / Raw(load=icmp_data)
-            )
-            icmp_response = (
-                Ether(src=dst_mac, dst=src_mac)
-                / IP(src=dst_ip, dst=src_ip)
-                / ICMP(type="echo-reply", id=12345, seq=seq)
-                / Raw(load=icmp_data)
-            )
+    def generate_quic_traffic(src_ip: str, dst_ip: str, src_port: int = None, dst_port: int = 443) -> list:
+        """
+        Génère du trafic simulant QUIC/HTTP3
+        """
+        if src_port is None:
+            src_port = random.randint(49152, 65535)
 
-            icmp_communication = (icmp_request, icmp_response)
-            self.packets.append(icmp_communication)
-            print(self.packets)
+        # QUIC Initial packet simulation
+        quic_initial = bytes([
+            0xc3,  # First byte (Long header with packet type Initial)
+            0x00, 0x00, 0x00, 0x01,  # Version 1
+            0x08,  # DCID Len
+        ] + [random.randint(0, 255) for _ in range(8)])  # Random Connection ID
+
+        # Create packets
+        packets = []
         
+        # Initial Packet
+        initial_packet = (
+            IP(src=src_ip, dst=dst_ip) /
+            UDP(sport=src_port, dport=dst_port) /
+            Raw(load=quic_initial)
+        )
+        packets.append(initial_packet)
+
+        # Handshake Packet
+        handshake_packet = (
+            IP(src=src_ip, dst=dst_ip) /
+            UDP(sport=src_port, dport=dst_port) /
+            Raw(load=bytes([0xe0] + [random.randint(0, 255) for _ in range(15)]))
+        )
+        packets.append(handshake_packet)
+
+        # Application Data Packet
+        data_packet = (
+            IP(src=src_ip, dst=dst_ip) /
+            UDP(sport=src_port, dport=dst_port) /
+            Raw(load=bytes([0x40] + [random.randint(0, 255) for _ in range(31]]))
+        )
+        packets.append(data_packet)
+
+        return packets
+
+def create_quic_pcap(output_file: str, src_ip: str, dst_ip: str) -> str:
+    """
+    Crée un fichier PCAP contenant du trafic QUIC simulé
+    """
+    packets = generate_quic_traffic(src_ip, dst_ip)
+    wrpcap(output_file, packets)
+    return output_file
+
 class PcapGenerator:
     """
     Classe pour sauvegarder différents flux dans un fichier pcap.

@@ -62,6 +62,16 @@
       "description": "Tunnel DNS avec données encodées",
       "target_port": 53,
       "payload_type": "dns"
+    },
+    "quic_traffic": {
+      "description": "QUIC/HTTP3 traffic pattern",
+      "generator": "generate_quic_traffic",
+      "parameters": {
+        "source_ip": "192.168.1.10",
+        "destination_ip": "192.168.1.20",
+        "source_port": "random",
+        "destination_port": 443
+      }
     }
   },
   "http": {
