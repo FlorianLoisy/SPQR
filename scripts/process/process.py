@@ -229,6 +229,41 @@ class SPQRSimple:
             ]
             return subprocess.run(cmd, check=True)
 
+    def generate_pcap(self, attack_type: str) -> Dict:
+        """Generate PCAP file only"""
+        try:
+            pcap_path = self._generate_attack_pcap(attack_type)
+            return {"pcap_file": pcap_path}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def test_with_engine(self, pcap_file: str, engine_type: str, version: str) -> Dict:
+        """Test PCAP with specific engine"""
+        try:
+            engine_config = {
+                "type": engine_type,
+                "version": version,
+                "mode": "docker"
+            }
+            self.config["engine"] = engine_config
+            
+            log_file = self.test_rules(pcap_file)
+            if not log_file:
+                return {"error": "Test failed"}
+
+            # Count alerts
+            alert_count = 0
+            if os.path.exists(log_file):
+                with open(log_file) as f:
+                    alert_count = sum(1 for line in f if '"event_type":"alert"' in line)
+
+            return {
+                "log_file": log_file,
+                "alert_count": alert_count
+            }
+        except Exception as e:
+            return {"error": str(e)}
+
 class SuricataExecution:
     def __init__(self):
         """

@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from scripts.process.process import SPQRSimple
 from datetime import datetime
+from typing import Dict, List
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -21,6 +22,15 @@ class SPQRWeb:
         logger.debug(f"Loading config from: {os.path.abspath(config_path)}")
         with open(config_path) as f:
             self.config = json.load(f)
+
+    def get_available_engines(self) -> List[Dict]:
+        """Get list of configured IDS engines"""
+        return self.config.get("engines", [
+            {"type": "suricata", "version": "6.0.15"},
+            {"type": "suricata", "version": "7.0.2"},
+            {"type": "snort", "version": "2.9"},
+            {"type": "snort", "version": "3"}
+        ])
 
 def main():
     st.set_page_config(
@@ -43,21 +53,66 @@ def main():
     # Main Content based on selection
     if page == "Test Rapide":
         st.header("Test Rapide de Règles")
-        # Attack Type Selection
-        attack_type = st.selectbox(
-            "Type d'attaque",
-            spqr_web.spqr.list_attack_types()
-        )
+        
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            # Attack Type Selection
+            attack_type = st.selectbox(
+                "Type d'attaque",
+                spqr_web.spqr.list_attack_types()
+            )
+        with col2:
+            # Engine Selection
+            selected_engines = st.multiselect(
+                "Sélectionner les IDS",
+                options=[f"{e['type']}-{e['version']}" for e in spqr_web.get_available_engines()],
+                default=[f"{e['type']}-{e['version']}" for e in spqr_web.get_available_engines()]
+            )
         
         if st.button("🚀 Lancer le Test Rapide"):
             with st.spinner("Génération et analyse en cours..."):
                 try:
-                    result = spqr_web.spqr.quick_test(attack_type)
-                    if isinstance(result, dict) and 'pcap_file' in result:
-                        st.success(f"Test terminé! PCAP généré: {Path(result['pcap_file']).name}")
-                        st.session_state['last_result'] = result
+                    # Generate PCAP first
+                    pcap_result = spqr_web.spqr.generate_pcap(attack_type)
+                    if not pcap_result or 'error' in pcap_result:
+                        st.error(f"Erreur lors de la génération du PCAP: {pcap_result.get('error', 'Unknown error')}")
+                        return
+
+                    # Show PCAP info
+                    pcap_file = pcap_result['pcap_file']
+                    st.success(f"PCAP généré: {Path(pcap_file).name}")
+
+                    # Test with each selected engine
+                    results = {}
+                    for engine_id in selected_engines:
+                        engine_type, version = engine_id.split('-')
+                        with st.spinner(f"Test avec {engine_type} {version}..."):
+                            result = spqr_web.spqr.test_with_engine(
+                                pcap_file, 
+                                engine_type=engine_type, 
+                                version=version
+                            )
+                            results[engine_id] = result
+
+                    # Display results in tabs
+                    if results:
+                        tabs = st.tabs(list(results.keys()))
+                        for tab, (engine_id, result) in zip(tabs, results.items()):
+                            with tab:
+                                if 'error' in result:
+                                    st.error(f"Erreur: {result['error']}")
+                                else:
+                                    if result.get('log_file') and os.path.exists(result['log_file']):
+                                        with open(result['log_file']) as f:
+                                            st.code(f.read())
+                                    if result.get('alert_count'):
+                                        st.metric("Alertes détectées", result['alert_count'])
+
+                    st.session_state['last_results'] = results
+
                 except Exception as e:
                     st.error(f"Erreur: {str(e)}")
+                    logger.exception("Erreur lors du test rapide")
 
     elif page == "Test Manuel":
         st.header("Test Manuel avec Fichiers")
