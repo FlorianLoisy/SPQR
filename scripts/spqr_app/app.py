@@ -89,6 +89,55 @@ def show_pcap_generation():
             except Exception as e:
                 st.error(f"❌ Erreur: {str(e)}")
 
+def show_protocol_config():
+    st.header("⚙️ Configuration des Protocoles")
+    
+    # Sélection du protocole
+    protocol = st.selectbox(
+        "Protocole à configurer",
+        ["HTTP", "DNS", "ICMP", "QUIC"]
+    )
+    
+    # Charger la configuration actuelle
+    config_path = f"config/protocols/{protocol.lower()}_config.json"
+    with open(config_path) as f:
+        config = json.load(f)
+    
+    # Interface d'édition
+    st.subheader("Configuration par défaut")
+    edited_config = {"default": {}}
+    
+    # Édition des valeurs par défaut
+    with st.expander("Valeurs par défaut", expanded=True):
+        for key, value in config["default"].items():
+            if isinstance(value, bool):
+                edited_config["default"][key] = st.checkbox(key, value)
+            elif isinstance(value, int):
+                edited_config["default"][key] = st.number_input(key, value=value)
+            elif isinstance(value, dict):
+                st.json(value)  # Pour l'instant, afficher uniquement
+            else:
+                edited_config["default"][key] = st.text_input(key, value)
+    
+    # Édition des configurations d'attaque
+    st.subheader("Configurations d'attaque")
+    edited_config["attacks"] = {}
+    
+    for attack_name, attack_config in config.get("attacks", {}).items():
+        with st.expander(f"Attaque: {attack_name}"):
+            edited_config["attacks"][attack_name] = {}
+            for key, value in attack_config.items():
+                edited_config["attacks"][attack_name][key] = st.text_input(
+                    f"{attack_name} - {key}", 
+                    value
+                )
+    
+    # Bouton de sauvegarde
+    if st.button("💾 Sauvegarder la configuration"):
+        with open(config_path, "w") as f:
+            json.dump(edited_config, f, indent=2)
+        st.success("Configuration sauvegardée!")
+
 def main():
     st.set_page_config(
         page_title="SPQR - Security Package for Quick Response",
@@ -104,8 +153,8 @@ def main():
     with st.sidebar:
         st.title("SPQR Navigation")
         page = st.radio(
-            "Sélectionner une fonction",
-            ["Génération PCAP", "Test Rapide", "Test Manuel", "Configuration", "Logs"]
+            "Navigation",
+            ["Génération PCAP", "Test Rapide", "Configuration Protocoles"]
         )
 
     # Main Content based on selection
@@ -189,36 +238,8 @@ def main():
             if st.button("Générer Rapport"):
                 st.info("Génération du rapport...")
 
-    elif page == "Configuration":
-        st.header("Configuration SPQR")
-        
-        # Network Configuration
-        st.subheader("Configuration Réseau")
-        col1, col2 = st.columns(2)
-        with col1:
-            source_ip = st.text_input("IP Source", value="192.168.1.10")
-            source_port = st.text_input("Port Source", value="1234")
-        with col2:
-            dest_ip = st.text_input("IP Destination", value="192.168.1.20")
-            dest_port = st.text_input("Port Destination", value="80")
-            
-        # Output Directory
-        st.subheader("Répertoire de Sortie")
-        output_dir = st.text_input("Répertoire de sortie", value="output")
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            if st.button("Sauvegarder Configuration"):
-                # Save config logic
-                st.success("Configuration sauvegardée!")
-        with col2:
-            if st.button("Charger Configuration"):
-                # Load config logic
-                st.info("Configuration chargée!")
-        with col3:
-            if st.button("Réinitialiser"):
-                # Reset config logic
-                st.info("Configuration réinitialisée!")
+    elif page == "Configuration Protocoles":
+        show_protocol_config()
 
     else:  # Logs
         st.header("Logs d'Exécution")

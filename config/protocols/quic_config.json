@@ -1,0 +1,13 @@
+{
+  "default": {
+    "dst_port": 443,
+    "version": "1",
+    "dcid_len": 8,
+    "scid_len": 8
+  },
+  "attacks": {
+    "version_negotiation": {
+      "version": "0"
+    }
+  }
+}

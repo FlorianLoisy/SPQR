@@ -1,0 +1,15 @@
+{
+  "default": {
+    "icmp_type": 8,
+    "icmp_code": 0,
+    "payload": "SPQR-ICMP-TEST",
+    "count": 4,
+    "id": 12345
+  },
+  "attacks": {
+    "ping_flood": {
+      "count": 1000,
+      "payload": "X" * 1400
+    }
+  }
+}

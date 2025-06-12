@@ -1,0 +1,25 @@
+{
+  "default": {
+    "dst_port": 80,
+    "method": "GET",
+    "path": "/",
+    "version": "1.1",
+    "host": "example.com",
+    "user_agent": "SPQR-Test-Agent",
+    "custom_headers": {},
+    "body": "",
+    "src_mac": "02:42:ac:11:00:02",
+    "dst_mac": "02:42:ac:11:00:03"
+  },
+  "attacks": {
+    "web_attack": {
+      "method": "POST",
+      "path": "/login",
+      "body": "username=admin&password=123456"
+    },
+    "sql_injection": {
+      "path": "/search?q=1' OR '1'='1",
+      "method": "GET"
+    }
+  }
+}
