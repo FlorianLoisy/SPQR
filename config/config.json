@@ -13,7 +13,7 @@
   },
   "suricata": {
     "config_file": "config/suricata_6.0.15/suricata.yaml",
-    "rules_file": "config/suricata_6.0.15/suricata.rules",
+    "rules_file": "config/suricata_6.0.15/rules/suricata.rules",
     "log_dir": "output/logs"
   },
   "snort": {
