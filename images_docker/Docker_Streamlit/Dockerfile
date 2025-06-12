@@ -1,9 +1,11 @@
 FROM python:3.9-slim
 
-# Install system dependencies and Docker CLI
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     tcpdump \
     libpcap-dev \
+    python3-dev \
+    gcc \
     curl \
     apt-transport-https \
     ca-certificates \
@@ -17,9 +19,10 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy and install Python requirements
+# Install Python requirements with specific Scapy version
 COPY scripts/spqr_app/requirements.txt .
 RUN pip install -r requirements.txt
+RUN pip install scapy>=2.5.0
 
 # Set environment variables
 ENV PYTHONPATH=/app
