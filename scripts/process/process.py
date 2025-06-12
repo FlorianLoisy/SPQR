@@ -12,6 +12,7 @@ from scripts.generate_traffic.spqrlib import (
     PcapGenerator, FlowGenerator, generate_pcap
 )  # Assurez-vous que le nom du fichier est correct
 from scripts.generate_path.folder import FolderGenerator
+from ..generate_traffic.protocol_factory import ProtocolGeneratorFactory
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("SPQR")
@@ -229,12 +230,38 @@ class SPQRSimple:
             ]
             return subprocess.run(cmd, check=True)
 
-    def generate_pcap(self, attack_type: str) -> Dict:
-        """Generate PCAP file only"""
+    def generate_pcap(self, attack_type: str, config: dict = None) -> dict:
         try:
-            pcap_path = self._generate_attack_pcap(attack_type)
-            return {"pcap_file": pcap_path}
+            if config is None:
+                config = {
+                    "network": self.config["network"],
+                    "protocol": {},
+                    "options": {"packet_count": 10, "time_interval": 100}
+                }
+
+            # Déterminer le type de protocole à partir du type d'attaque
+            protocol_type = self.config["traffic_patterns"][attack_type].get("payload_type", "http")
+            
+            # Créer le générateur approprié
+            generator = ProtocolGeneratorFactory.create_generator(
+                protocol_type,
+                {**config["network"], **config["protocol"]}
+            )
+            
+            # Générer les paquets
+            packets = generator.generate()
+            
+            # Sauvegarder en PCAP
+            output_dir = Path(self.config["pcap"]["output_dir"])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            pcap_file = output_dir / f"{attack_type}_{timestamp}.pcap"
+            
+            wrpcap(str(pcap_file), packets)
+            
+            return {"pcap_file": str(pcap_file)}
         except Exception as e:
+            logger.error(f"Error generating PCAP: {str(e)}")
             return {"error": str(e)}
 
     def test_with_engine(self, pcap_file: str, engine_type: str, version: str) -> Dict:
