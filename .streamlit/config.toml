@@ -1,0 +1,12 @@
+[server]
+enableCORS = false
+enableXsrfProtection = false
+
+[browser]
+serverPort = 8501
+serverAddress = "0.0.0.0"
+
+[runner]
+# Reduce file watcher sensitivity
+fastReruns = true
+watchPatterns = ["*.py", "*.json"]

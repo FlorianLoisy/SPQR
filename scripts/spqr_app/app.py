@@ -6,7 +6,8 @@ import logging
 from pathlib import Path
 from scripts.process.process import SPQRSimple
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Any
+from scripts.utils.file_watcher import FileWatcher  # Changed from relative to absolute import
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -15,22 +16,34 @@ logger = logging.getLogger(__name__)
 class SPQRWeb:
     def __init__(self):
         self.spqr = SPQRSimple()
+        self.file_watcher = FileWatcher()
         self.load_config()
         
     def load_config(self):
-        config_path = "config/config.json"
-        logger.debug(f"Loading config from: {os.path.abspath(config_path)}")
-        with open(config_path) as f:
-            self.config = json.load(f)
+        """Load main config and protocol configs"""
+        try:
+            # Add main config to file watcher
+            config_path = "config/config.json"
+            self.file_watcher.add_watch(config_path)
             
-        # Charger les configurations des protocoles
-        self.protocol_configs = {}
-        for protocol in ["http", "dns", "icmp", "quic"]:
-            try:
-                with open(f"config/protocols/{protocol}_config.json") as f:
-                    self.protocol_configs[protocol] = json.load(f)
-            except FileNotFoundError:
-                logger.warning(f"No config found for {protocol}")
+            with open(config_path) as f:
+                self.config = json.load(f)
+            
+            # Load and watch protocol configs
+            self.protocol_configs = {}
+            for protocol in ["http", "dns", "icmp", "quic"]:
+                config_path = f"config/protocols/{protocol}_config.json"
+                self.file_watcher.add_watch(config_path)
+                try:
+                    with open(config_path) as f:
+                        self.protocol_configs[protocol] = json.load(f)
+                except (json.JSONDecodeError, FileNotFoundError) as e:
+                    logger.warning(f"Config issue for {protocol}: {str(e)}")
+                    self.protocol_configs[protocol] = {"default": {}, "attacks": {}}
+                    
+        except Exception as e:
+            logger.error(f"Error loading configuration: {str(e)}")
+            raise
 
     def get_available_engines(self) -> List[Dict]:
         """Get list of configured IDS engines"""
@@ -60,79 +73,66 @@ def show_pcap_generation():
             st.info(spqr_web.config["traffic_patterns"][attack_type]["description"])
             
         # Configuration du protocole
-        st.subheader("Configuration du Protocole")
         protocol_type = spqr_web.config["traffic_patterns"][attack_type].get("payload_type", "http")
+        protocol_config = spqr_web.protocol_configs[protocol_type]
         
-        # Chargement de la configuration du protocole
-        config_path = f"config/protocols/{protocol_type}_config.json"
-        try:
-            with open(config_path) as f:
-                protocol_config = json.load(f)
-                
-            # Interface de configuration du protocole
-            with st.expander(f"Configuration {protocol_type.upper()}", expanded=True):
-                edited_config = {}
-                
-                # Paramètres de base
-                st.markdown("#### Paramètres de base")
-                cols = st.columns(2)
-                with cols[0]:
-                    for key, value in protocol_config["default"].items():
-                        if isinstance(value, bool):
-                            edited_config[key] = st.checkbox(
-                                f"{key}", value,
-                                help=f"Configuration de {key}"
-                            )
-                        elif isinstance(value, int):
-                            edited_config[key] = st.number_input(
-                                f"{key}", value=value,
-                                help=f"Configuration de {key}"
-                            )
-                        elif isinstance(value, dict):
-                            st.json(value)
-                        else:
-                            edited_config[key] = st.text_input(
-                                f"{key}", value,
-                                help=f"Configuration de {key}"
-                            )
-                
-                # Paramètres avancés
-                if "attacks" in protocol_config and attack_type in protocol_config["attacks"]:
-                    st.markdown("#### Paramètres spécifiques à l'attaque")
-                    attack_params = protocol_config["attacks"][attack_type]
-                    for key, value in attack_params.items():
-                        edited_config[key] = st.text_input(
-                            f"{key} (spécifique)", 
-                            value,
-                            help=f"Paramètre spécifique pour {attack_type}"
-                        )
-                
-        except FileNotFoundError:
-            st.warning(f"Pas de configuration trouvée pour {protocol_type}")
+        # Interface de configuration du protocole
+        with st.expander(f"Configuration {protocol_type.upper()}", expanded=True):
             edited_config = {}
-    
+            
+            try:
+                # Configuration par défaut si attaque personnalisée
+                if attack_type == "custom":
+                    st.markdown("#### Configuration de base")
+                    for key, value in protocol_config["default"].items():
+                        edited_config[key] = _display_config_input(key, value)
+                else:
+                    # Afficher uniquement les paramètres spécifiques à l'attaque
+                    attack_params = protocol_config["attacks"].get(attack_type, {}).get("parameters", {})
+                    if attack_params:
+                        st.markdown("#### Paramètres spécifiques")
+                        for key, value in attack_params.items():
+                            # Ne pas afficher les paramètres qui sont déjà dans la config par défaut
+                            if key not in protocol_config["default"]:
+                                edited_config[key] = _display_config_input(key, value)
+                    
+                    # Ajouter les paramètres par défaut nécessaires
+                    for key, value in protocol_config["default"].items():
+                        if key not in edited_config:
+                            edited_config[key] = value
+                            
+            except Exception as e:
+                logger.error(f"Error in protocol configuration: {str(e)}")
+                st.error(f"Erreur de configuration: {str(e)}")
+                return
+
     with col2:
         # Paramètres réseau
         st.subheader("Paramètres réseau")
-        network_config = {
-            "src_ip": st.text_input(
-                "IP Source",
-                value=spqr_web.config["network"]["source_ip"]
-            ),
-            "dst_ip": st.text_input(
-                "IP Destination",
-                value=spqr_web.config["network"]["dest_ip"]
-            ),
-            "src_port": st.number_input(
-                "Port Source",
-                value=int(spqr_web.config["network"].get("source_port", 1234))
-            ),
-            "dst_port": st.number_input(
-                "Port Destination",
-                value=int(spqr_web.config["network"].get("dest_port", 80))
-            )
-        }
-        
+        try:
+            network_config = {
+                "src_ip": st.text_input(
+                    "IP Source",
+                    value=spqr_web.config["network"].get("source_ip", "192.168.1.10")
+                ),
+                "dst_ip": st.text_input(
+                    "IP Destination",
+                    value=spqr_web.config["network"].get("dest_ip", "192.168.1.20")
+                ),
+                "src_port": st.number_input(
+                    "Port Source",
+                    value=int(spqr_web.config["network"].get("source_port", 1234))
+                ),
+                "dst_port": st.number_input(
+                    "Port Destination",
+                    value=int(spqr_web.config["network"].get("dest_port", 80))
+                )
+            }
+        except Exception as e:
+            logger.error(f"Error in network configuration: {str(e)}")
+            st.error(f"Erreur de configuration réseau: {str(e)}")
+            return
+
         # Options de génération
         st.subheader("Options")
         options = {
@@ -144,6 +144,12 @@ def show_pcap_generation():
     if st.button("🚀 Générer PCAP"):
         with st.spinner("Génération du fichier PCAP en cours..."):
             try:
+                # Log des configurations
+                logger.debug(f"Attack type: {attack_type}")
+                logger.debug(f"Protocol config: {edited_config}")
+                logger.debug(f"Network config: {network_config}")
+                logger.debug(f"Options: {options}")
+                
                 # Combiner toutes les configurations
                 generation_config = {
                     "network": network_config,
@@ -157,32 +163,54 @@ def show_pcap_generation():
                     config=generation_config
                 )
                 
-                if isinstance(result, dict) and 'pcap_file' in result:
-                    pcap_path = Path(result['pcap_file'])
-                    st.success(f"✅ PCAP généré avec succès!")
-                    
-                    # Afficher les détails du fichier
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Taille", f"{pcap_path.stat().st_size / 1024:.2f} KB")
-                    with col2:
-                        st.metric("Paquets", options["packet_count"])
-                    with col3:
-                        st.download_button(
-                            "📥 Télécharger PCAP",
-                            data=pcap_path.read_bytes(),
-                            file_name=pcap_path.name,
-                            mime="application/vnd.tcpdump.pcap"
-                        )
-                    
-                    # Aperçu du PCAP
-                    with st.expander("Aperçu du PCAP"):
-                        st.code(f"tcpdump -r {pcap_path} -n")
+                logger.debug(f"Generation result: {result}")  # Add this line
+                
+                if isinstance(result, dict):
+                    if 'error' in result:
+                        st.error(f"❌ Erreur: {result['error']}")
+                        logger.error(f"PCAP generation error: {result['error']}")
+                        return
                         
+                    if 'pcap_file' in result:
+                        pcap_path = Path(result['pcap_file'])
+                        if not pcap_path.exists():
+                            st.error("❌ Le fichier PCAP n'a pas été créé")
+                            logger.error(f"PCAP file not found: {pcap_path}")
+                            return
+                            
+                        st.success(f"✅ PCAP généré avec succès!")
+                        
+                        # Afficher les détails du fichier
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Taille", f"{pcap_path.stat().st_size / 1024:.2f} KB")
+                        with col2:
+                            st.metric("Paquets", options["packet_count"])
+                        with col3:
+                            st.download_button(
+                                "📥 Télécharger PCAP",
+                                data=pcap_path.read_bytes(),
+                                file_name=pcap_path.name,
+                                mime="application/vnd.tcpdump.pcap"
+                            )
                 else:
-                    st.error("❌ Erreur lors de la génération du PCAP")
+                    st.error("❌ Format de résultat invalide")
+                    logger.error(f"Invalid result format: {result}")
+                    
             except Exception as e:
+                logger.exception("Error during PCAP generation")
                 st.error(f"❌ Erreur: {str(e)}")
+
+def _display_config_input(key: str, value: Any) -> Any:
+    """Affiche le widget approprié selon le type de valeur"""
+    if isinstance(value, bool):
+        return st.checkbox(key, value)
+    elif isinstance(value, int):
+        return st.number_input(key, value=value)
+    elif isinstance(value, dict):
+        return st.json(value)
+    else:
+        return st.text_input(key, str(value))
 
 def show_protocol_config():
     st.header("⚙️ Configuration des Protocoles")

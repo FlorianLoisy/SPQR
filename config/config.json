@@ -3,8 +3,7 @@
     "source_ip": "192.168.1.10",
     "dest_ip": "192.168.1.20",
     "source_port": 1234,
-    "dest_port": 80,
-    "protocols": ["tcp", "udp", "icmp"]
+    "dest_port": 80
   },
   "engine": {
     "type": "suricata",
@@ -35,7 +34,6 @@
   "traffic_patterns": {
     "web_attack": {
       "description": "Simulation d'attaque web",
-      "target_port": 80,
       "payload_type": "http"
     },
     "malware_c2": {
@@ -101,5 +99,10 @@
   "tcp": {
     "DEFAULT_SRC_IP": "192.168.1.10",
     "DEFAULT_DST_IP": "192.168.1.20"
+  },
+  "pcap": {
+    "output_dir": "/data/output/pcap",
+    "filename_prefix": "spqr_",
+    "max_file_size": 100000000
   }
 }

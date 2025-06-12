@@ -4,14 +4,13 @@
     "dst_port": 53,
     "query_domain": "example.com",
     "record_type": "A",
-    "src_mac": "02:42:ac:11:00:02",
-    "dst_mac": "02:42:ac:11:00:03"
+    "custom_payload": null
   },
   "attacks": {
     "dns_tunneling": {
       "query_domain": "exfil.malicious.com",
       "record_type": "TXT",
-      "custom_payload": "Base64EncodedData"
+      "custom_payload": "hidden_data"
     }
   }
 }

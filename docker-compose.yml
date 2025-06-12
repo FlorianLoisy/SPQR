@@ -10,13 +10,12 @@ services:
     ports:
       - "8501:8501"
     volumes:
-      - ./scripts:/app/scripts:ro
-      - ./config:/app/config:ro
-      - ./output:/app/output
-      - /var/run/docker.sock:/var/run/docker.sock  # Mount Docker socket
+      - ./scripts:/app/scripts
+      - ./config:/app/config
+      - ./output:/data/output
     environment:
       - PYTHONPATH=/app
-      - HOST_PWD=${PWD}  # Pass host working directory
+      - PCAP_OUTPUT_DIR=/data/output/pcap
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
       interval: 30s
