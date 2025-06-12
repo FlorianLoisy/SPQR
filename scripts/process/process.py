@@ -59,28 +59,62 @@ class SPQRSimple:
         version = engine.get("version", "6.0.15")
         mode = engine.get("mode", "docker")
 
+        # Convert paths to absolute and verify files exist
         log_dir = Path(self.config["suricata"]["log_dir"]).absolute()
         config_path = Path(self.config["suricata"]["config_file"]).absolute()
         rules_path = Path(rules_file or self.config["suricata"]["rules_file"]).absolute()
         pcap_path = Path(pcap_file).absolute()
 
+        # Verify files exist
+        if not pcap_path.is_file():
+            logger.error(f"PCAP file not found: {pcap_path}")
+            return None
+        if not config_path.is_file():
+            logger.error(f"Config file not found: {config_path}")
+            return None
+        if not rules_path.is_file():
+            logger.error(f"Rules file not found: {rules_path}")
+            return None
+
+        # Create log directory
         os.makedirs(log_dir, exist_ok=True)
 
         if mode == "docker":
+            # Ensure config directory structure exists in container
+            container_config_dir = "/etc/suricata"
+            container_rules_dir = f"{container_config_dir}/rules"
+            
+            # Use consistent paths inside container
             image = f"spqr_{engine_type}_{version}"
             cmd = [
                 "docker", "run", "--rm",
-                "-v", f"{pcap_path}:/input.pcap:ro",
-                "-v", f"{config_path}:/etc/suricata/suricata.yaml:ro",
-                "-v", f"{rules_path}:/etc/suricata/suricata.rules:ro",
-                "-v", f"{log_dir}:/var/log/suricata",
+                # Create required directories in container
+                "--entrypoint", "sh",
                 image,
-                "suricata" ,
-                "-c", "/etc/suricata/suricata.yaml",
-                "-S", "/etc/suricata/suricata.rules",
-                "-r", "/input.pcap",
-                "-l", "/var/log/suricata"
+                "-c", f"mkdir -p {container_rules_dir} && suricata "
+                f"-c {container_config_dir}/suricata.yaml "
+                f"-S {container_rules_dir}/suricata.rules "
+                f"-r /input.pcap "
+                f"-l /var/log/suricata",
+                # Mount volumes
+                "-v", f"{pcap_path}:/input.pcap:ro",
+                "-v", f"{config_path}:{container_config_dir}/suricata.yaml:ro",
+                "-v", f"{rules_path}:{container_rules_dir}/suricata.rules:ro",
+                "-v", f"{log_dir}:/var/log/suricata"
             ]
+
+            # Log the command for debugging
+            logger.info(f"Config file path: {config_path}")
+            logger.info(f"Rules file path: {rules_path}")
+            logger.debug(f"Executing command: {' '.join(cmd)}")
+            
+            try:
+                result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+                logger.debug(f"Command output: {result.stdout}")
+                return str(log_dir / "eve.json")
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Command failed with output:\n{e.stdout}\n{e.stderr}")
+                return None
         else:
             cmd = [
                 "suricata",
@@ -89,13 +123,7 @@ class SPQRSimple:
                 "-r", str(pcap_path),
                 "-l", str(log_dir)
             ]
-
-        try:
-            subprocess.run(cmd, check=True)
-            return str(log_dir / "eve.json")
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Erreur d'exécution : {e}")
-            return None
+            return subprocess.run(cmd, check=True)
 
     def generate_report(self, log_file: str) -> str:
         report_dir = Path(self.config["output"]["reports_dir"])
