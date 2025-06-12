@@ -1,9 +1,11 @@
 from .base_generator import ProtocolGenerator
 from scapy.all import *
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from dataclasses import dataclass
+from typing import List, Dict, Optional
 import json
 from pathlib import Path
+import random
+import time
 
 @dataclass
 class HTTPConfig:
@@ -16,10 +18,8 @@ class HTTPConfig:
     version: str = "1.1"
     host: str = "example.com"
     user_agent: str = "SPQR-Test-Agent"
-    custom_headers: Dict = field(default_factory=dict)
+    custom_headers: Dict = None
     body: str = ""
-    src_mac: str = "02:42:ac:11:00:02"
-    dst_mac: str = "02:42:ac:11:00:03"
 
     def __post_init__(self):
         # Charger la configuration par défaut
@@ -53,123 +53,147 @@ class HTTPConfig:
 
 class HTTPGenerator(ProtocolGenerator):
     def __init__(self, config: HTTPConfig):
+        super().__init__()
         self.config = config
-        
-    def generate(self) -> List[Packet]:
-        """Génère une séquence complète de paquets HTTP"""
-        packets = []
-        
-        # 1. TCP Handshake
-        packets.extend(self._generate_tcp_handshake())
-        
-        # 2. HTTP Request
-        packets.extend(self._generate_http_request())
-        
-        # 3. HTTP Response
-        packets.extend(self._generate_http_response())
-        
-        # 4. TCP Teardown
-        packets.extend(self._generate_tcp_teardown())
-        
-        return packets
+        self.seq = random.randint(1000, 9999)
+        self.ack = 0
 
-    def _generate_tcp_handshake(self) -> List[Packet]:
-        """Génère la séquence de handshake TCP"""
+    def generate(self) -> List[Packet]:
+        all_packets = []
+        
+        for _ in range(self.packet_count):
+            # Generate single HTTP transaction
+            packets = []
+            
+            # TCP Handshake
+            packets.extend(self._generate_handshake())
+            
+            # HTTP Request/Response
+            request_payload = self._build_http_request()
+            packets.extend(self._generate_http_request(request_payload))
+            
+            response_payload = self._build_http_response()
+            packets.extend(self._generate_http_response(response_payload))
+            
+            # TCP Teardown
+            packets.extend(self._generate_teardown())
+            
+            all_packets.extend(packets)
+            
+            # Reset sequence numbers for next transaction
+            self.seq = random.randint(1000, 9999)
+            self.ack = 0
+            
+            # Add delay if specified
+            if self.time_interval > 0 and _ < self.packet_count - 1:
+                time.sleep(self.time_interval / 1000)  # Convert ms to seconds
+        
+        return all_packets
+    
+    def _generate_handshake(self) -> List[Packet]:
         # SYN
-        syn = (
-            Ether(src=self.config.src_mac, dst=self.config.dst_mac) /
-            IP(src=self.config.src_ip, dst=self.config.dst_ip) /
-            TCP(sport=self.config.src_port, dport=self.config.dst_port, flags="S")
-        )
+        syn = IP(src=self.config.src_ip, dst=self.config.dst_ip) / \
+              TCP(sport=self.config.src_port, dport=self.config.dst_port,
+                  seq=self.seq, flags='S')
         
         # SYN-ACK
-        syn_ack = (
-            Ether(src=self.config.dst_mac, dst=self.config.src_mac) /
-            IP(src=self.config.dst_ip, dst=self.config.src_ip) /
-            TCP(sport=self.config.dst_port, dport=self.config.src_port, flags="SA")
-        )
+        self.ack = self.seq + 1
+        syn_ack = IP(src=self.config.dst_ip, dst=self.config.src_ip) / \
+                  TCP(sport=self.config.dst_port, dport=self.config.src_port,
+                      seq=self.ack, ack=self.ack, flags='SA')
         
         # ACK
-        ack = (
-            Ether(src=self.config.src_mac, dst=self.config.dst_mac) /
-            IP(src=self.config.src_ip, dst=self.config.dst_ip) /
-            TCP(sport=self.config.src_port, dport=self.config.dst_port, flags="A")
-        )
+        self.seq = self.ack
+        ack = IP(src=self.config.src_ip, dst=self.config.dst_ip) / \
+              TCP(sport=self.config.src_port, dport=self.config.dst_port,
+                  seq=self.seq, ack=self.ack + 1, flags='A')
         
         return [syn, syn_ack, ack]
-
-    def _generate_http_request(self) -> List[Packet]:
-        """Génère la requête HTTP"""
-        # Construire l'en-tête HTTP
+    
+    def _generate_http_request(self, payload: bytes) -> List[Packet]:
+        # PSH-ACK with HTTP request
+        self.seq += 1
+        request = IP(src=self.config.src_ip, dst=self.config.dst_ip) / \
+                 TCP(sport=self.config.src_port, dport=self.config.dst_port,
+                     seq=self.seq, ack=self.ack + 1, flags='PA') / \
+                 Raw(load=payload)
+        
+        # Server ACK
+        server_ack = IP(src=self.config.dst_ip, dst=self.config.src_ip) / \
+                    TCP(sport=self.config.dst_port, dport=self.config.src_port,
+                        seq=self.ack + 1, ack=self.seq + len(payload), flags='A')
+        
+        self.seq += len(payload)
+        self.ack += 1
+        
+        return [request, server_ack]
+    
+    def _generate_http_response(self, payload: bytes) -> List[Packet]:
+        # PSH-ACK with HTTP response
+        response = IP(src=self.config.dst_ip, dst=self.config.src_ip) / \
+                  TCP(sport=self.config.dst_port, dport=self.config.src_port,
+                      seq=self.ack, ack=self.seq, flags='PA') / \
+                  Raw(load=payload)
+        
+        # Client ACK
+        client_ack = IP(src=self.config.src_ip, dst=self.config.dst_ip) / \
+                    TCP(sport=self.config.src_port, dport=self.config.dst_port,
+                        seq=self.seq, ack=self.ack + len(payload), flags='A')
+        
+        self.ack += len(payload)
+        
+        return [response, client_ack]
+    
+    def _generate_teardown(self) -> List[Packet]:
+        # FIN from client
+        fin = IP(src=self.config.src_ip, dst=self.config.dst_ip) / \
+              TCP(sport=self.config.src_port, dport=self.config.dst_port,
+                  seq=self.seq, ack=self.ack, flags='FA')
+        
+        # FIN-ACK from server
+        fin_ack = IP(src=self.config.dst_ip, dst=self.config.src_ip) / \
+                  TCP(sport=self.config.dst_port, dport=self.config.src_port,
+                      seq=self.ack, ack=self.seq + 1, flags='FA')
+        
+        # Final ACK from client
+        last_ack = IP(src=self.config.src_ip, dst=self.config.dst_ip) / \
+                   TCP(sport=self.config.src_port, dport=self.config.dst_port,
+                       seq=self.seq + 1, ack=self.ack + 1, flags='A')
+        
+        return [fin, fin_ack, last_ack]
+    
+    def _build_http_request(self) -> bytes:
+        """Construit la requête HTTP avec les paramètres configurés"""
+        # Construire les en-têtes HTTP
         headers = {
             "Host": self.config.host,
             "User-Agent": self.config.user_agent,
-            "Accept": "*/*",
             "Connection": "close"
         }
-        headers.update(self.config.custom_headers)
         
-        # Construire la requête HTTP complète
-        http_request = (
-            f"{self.config.method} {self.config.path} HTTP/{self.config.version}\r\n" +
-            "\r\n".join(f"{k}: {v}" for k, v in headers.items()) +
-            "\r\n\r\n" +
+        # Ajouter les en-têtes personnalisés
+        if self.config.custom_headers:
+            headers.update(self.config.custom_headers)
+        
+        # Construire la requête
+        request_lines = [
+            f"{self.config.method} {self.config.path} HTTP/{self.config.version}",
+            *[f"{k}: {v}" for k, v in headers.items()],
+            "",  # Ligne vide pour séparer les en-têtes du corps
             self.config.body
-        )
+        ]
         
-        # Paquet TCP avec la requête HTTP
-        request_packet = (
-            Ether(src=self.config.src_mac, dst=self.config.dst_mac) /
-            IP(src=self.config.src_ip, dst=self.config.dst_ip) /
-            TCP(sport=self.config.src_port, dport=self.config.dst_port, flags="PA") /
-            Raw(load=http_request)
-        )
+        return "\r\n".join(request_lines).encode()
+    
+    def _build_http_response(self) -> bytes:
+        """Construit une réponse HTTP basique"""
+        response_lines = [
+            "HTTP/1.1 200 OK",
+            "Server: SPQR-Test-Server",
+            "Content-Type: text/plain",
+            "Connection: close",
+            "",  # Ligne vide pour séparer les en-têtes du corps
+            "Hello from SPQR!"
+        ]
         
-        return [request_packet]
-
-    def _generate_http_response(self) -> List[Packet]:
-        """Génère la réponse HTTP"""
-        # Réponse HTTP basique
-        http_response = (
-            "HTTP/1.1 200 OK\r\n"
-            "Server: SPQR-Test-Server\r\n"
-            "Content-Type: text/html\r\n"
-            "Content-Length: 13\r\n"
-            "Connection: close\r\n"
-            "\r\n"
-            "Hello, World!"
-        )
-        
-        response_packet = (
-            Ether(src=self.config.dst_mac, dst=self.config.src_mac) /
-            IP(src=self.config.dst_ip, dst=self.config.src_ip) /
-            TCP(sport=self.config.dst_port, dport=self.config.src_port, flags="PA") /
-            Raw(load=http_response)
-        )
-        
-        return [response_packet]
-
-    def _generate_tcp_teardown(self) -> List[Packet]:
-        """Génère la séquence de fin de connexion TCP"""
-        # FIN from client
-        fin1 = (
-            Ether(src=self.config.src_mac, dst=self.config.dst_mac) /
-            IP(src=self.config.src_ip, dst=self.config.dst_ip) /
-            TCP(sport=self.config.src_port, dport=self.config.dst_port, flags="FA")
-        )
-        
-        # FIN-ACK from server
-        fin_ack = (
-            Ether(src=self.config.dst_mac, dst=self.config.src_mac) /
-            IP(src=self.config.dst_ip, dst=self.config.src_ip) /
-            TCP(sport=self.config.dst_port, dport=self.config.src_port, flags="FA")
-        )
-        
-        # Final ACK from client
-        last_ack = (
-            Ether(src=self.config.src_mac, dst=self.config.dst_mac) /
-            IP(src=self.config.src_ip, dst=self.config.dst_ip) /
-            TCP(sport=self.config.src_port, dport=self.config.dst_port, flags="A")
-        )
-        
-        return [fin1, fin_ack, last_ack]
+        return "\r\n".join(response_lines).encode()

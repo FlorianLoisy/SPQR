@@ -22,7 +22,13 @@ class SPQRSimple:
             self.config = json.load(f)
 
     def list_attack_types(self) -> List[str]:
-        return list(self.config.get("traffic_patterns", {}).keys())
+        """Liste tous les types de trafic disponibles"""
+        patterns = self.config.get("traffic_patterns", {})
+        # Trier pour mettre les types par défaut en premier
+        return sorted(
+            patterns.keys(),
+            key=lambda x: "0" if x.endswith("_default") else "1" + x
+        )
 
     def get_timestamp(self) -> str:
         return datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -287,26 +293,40 @@ class SPQRSimple:
         except Exception as e:
             return {"error": str(e)}
 
-    def generate_pcap(self, attack_type: str, config: dict = None) -> dict:
+    def generate_pcap(self, attack_type: str, config: Optional[Dict] = None) -> Dict:
         try:
             if config is None:
                 config = {
                     "network": self.config["network"],
                     "protocol": {},
-                    "options": {"packet_count": 10, "time_interval": 100}
+                    "options": {"packet_count": 1, "time_interval": 0}
                 }
 
-            # Get protocol type from attack configuration
+            # Déterminer le type de protocole
             protocol_type = self.config["traffic_patterns"][attack_type].get("payload_type", "http")
+            
+            # Créer le générateur approprié
+            try:
+                generator = ProtocolGeneratorFactory.create_generator(
+                    protocol_type=protocol_type,
+                    config={**config["network"], **config["protocol"]}
+                )
+                
+                # Configurer les options de génération
+                generator.set_options(config.get("options", {}))
+                
+            except Exception as e:
+                logger.error(f"Failed to create protocol generator: {str(e)}")
+                return {"error": f"Erreur de génération du protocole: {str(e)}"}
 
-            # Create generator instance
-            generator = ProtocolGeneratorFactory.create_generator(
-                protocol_type=protocol_type,
-                config={**config["network"], **config["protocol"]}
-            )
-
-            # Generate packets
-            packets = generator.generate()
+            # Générer les paquets
+            try:
+                packets = generator.generate()
+                if not packets:
+                    return {"error": "Aucun paquet généré"}
+            except Exception as e:
+                logger.error(f"Failed to generate packets: {str(e)}")
+                return {"error": f"Erreur de génération des paquets: {str(e)}"}
 
             # Save to PCAP file
             output_dir = Path(self.config["pcap"]["output_dir"])

@@ -1,54 +1,49 @@
-from dataclasses import dataclass
-from typing import List, Optional
+from .base_generator import ProtocolGenerator
 from scapy.all import *
+from dataclasses import dataclass
+from typing import List
+import random
+import time
 
 @dataclass
 class ICMPConfig:
     src_ip: str
     dst_ip: str
-    src_mac: str = "02:42:ac:11:00:02"
-    dst_mac: str = "02:42:ac:11:00:03"
     icmp_type: int = 8  # Echo Request
     icmp_code: int = 0
     payload: str = "SPQR-ICMP-TEST"
     count: int = 4
-    id: int = 12345
+    id: int = None
+    src_mac: str = None
+    dst_mac: str = None
+    time_interval: int = 1000  # Intervalle de temps entre les paquets en millisecondes
 
-class ICMPGenerator:
+class ICMPGenerator(ProtocolGenerator):
     def __init__(self, config: ICMPConfig):
+        super().__init__()
         self.config = config
+        self.id = self.config.id or random.randint(1000, 65535)
 
     def generate(self) -> List[Packet]:
-        """Génère une séquence de paquets ICMP"""
         packets = []
         
-        for seq in range(self.config.count):
-            # ICMP Request
-            icmp_request = (
-                Ether(src=self.config.src_mac, dst=self.config.dst_mac) /
-                IP(src=self.config.src_ip, dst=self.config.dst_ip) /
-                ICMP(
-                    type=self.config.icmp_type,
-                    code=self.config.icmp_code,
-                    id=self.config.id,
-                    seq=seq
-                ) /
-                Raw(load=self.config.payload)
-            )
+        for i in range(self.packet_count):
+            # Créer la requête ICMP (ping)
+            request = IP(src=self.config.src_ip, dst=self.config.dst_ip) / \
+                     ICMP(type=self.config.icmp_type,
+                          code=self.config.icmp_code,
+                          id=self.id,
+                          seq=i+1) / \
+                     Raw(load=self.config.payload)
             
-            # ICMP Reply
-            icmp_reply = (
-                Ether(src=self.config.dst_mac, dst=self.config.src_mac) /
-                IP(src=self.config.dst_ip, dst=self.config.src_ip) /
-                ICMP(
-                    type=0,  # Echo Reply
-                    code=0,
-                    id=self.config.id,
-                    seq=seq
-                ) /
-                Raw(load=self.config.payload)
-            )
+            # Créer la réponse ICMP (pong)
+            response = IP(src=self.config.dst_ip, dst=self.config.src_ip) / \
+                      ICMP(type=0, code=0, id=self.id, seq=i+1) / \
+                      Raw(load=self.config.payload)
             
-            packets.extend([icmp_request, icmp_reply])
+            packets.extend([request, response])
+            
+            if self.time_interval > 0 and i < self.packet_count - 1:
+                time.sleep(self.time_interval / 1000)
         
         return packets
