@@ -2,7 +2,7 @@ import json
 from scapy.all import *
 import random
 import struct
-from typing import List
+from typing import List, Optional
 
 from .protocols.http_generator import HTTPGenerator, HTTPConfig
 from .protocols.dns_generator import DNSGenerator, DNSConfig
@@ -259,28 +259,24 @@ class FlowGenerator:
         generator = ICMPGenerator(config)
         self.packets.extend(generator.generate_ping())
 
-    def generate_quic_traffic(src_ip: str, dst_ip: str, src_port: int = None, dst_port: int = 443) -> list:
+    def generate_quic_traffic(src_ip: str, dst_ip: str, src_port: Optional[int] = None, dst_port: int = 443) -> List[Packet]:
         """
-        Génère du trafic simulant QUIC/HTTP3
+        Génère du trafic QUIC simulé
         """
         if src_port is None:
             src_port = random.randint(49152, 65535)
 
-        # QUIC Initial packet simulation
-        quic_initial = bytes([
-            0xc3,  # First byte (Long header with packet type Initial)
-            0x00, 0x00, 0x00, 0x01,  # Version 1
-            0x08,  # DCID Len
-        ] + [random.randint(0, 255) for _ in range(8)])  # Random Connection ID
-
-        # Create packets
         packets = []
-        
+
         # Initial Packet
         initial_packet = (
             IP(src=src_ip, dst=dst_ip) /
             UDP(sport=src_port, dport=dst_port) /
-            Raw(load=quic_initial)
+            Raw(load=bytes([
+                0xc3,  # Long header with packet type Initial
+                0x00, 0x00, 0x00, 0x01,  # Version 1
+                0x08  # DCID Length
+            ]) + os.urandom(8))  # Random Connection ID
         )
         packets.append(initial_packet)
 
@@ -288,15 +284,15 @@ class FlowGenerator:
         handshake_packet = (
             IP(src=src_ip, dst=dst_ip) /
             UDP(sport=src_port, dport=dst_port) /
-            Raw(load=bytes([0xe0] + [random.randint(0, 255) for _ in range(15)]))
+            Raw(load=bytes([0xe0]) + os.urandom(16))  # Handshake type + random data
         )
         packets.append(handshake_packet)
 
-        # Application Data Packet
+        # Short Header (1-RTT) Packet
         data_packet = (
             IP(src=src_ip, dst=dst_ip) /
             UDP(sport=src_port, dport=dst_port) /
-            Raw(load=bytes([0x40] + [random.randint(0, 255) for _ in range(31]]))
+            Raw(load=bytes([0x40]) + os.urandom(31))  # 1-RTT type + random payload
         )
         packets.append(data_packet)
 
@@ -479,3 +475,6 @@ class PcapGenerator:
         PcapGenerator().save_to_pcap(output_file, pkt_flat)
 
 generate_pcap = PcapGenerator.generate_pcap
+
+# Ce fichier peut être supprimé une fois que tous les générateurs
+# ont été migrés vers leurs propres fichiers
