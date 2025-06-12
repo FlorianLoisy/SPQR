@@ -14,3 +14,23 @@
 __pycache__/
 venv/
 output/
+
+# Ignorer les fichiers Python compilés
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Ignorer les fichiers journaux
+*.log
+
+# Ignorer les fichiers d'environnement
+.env
+.venv
+
+# Ignorer les fichiers système Mac
+.DS_Store
+
+# Ignorer les fichiers PCAP dans le dossier output, sauf .gitkeep
+output/pcap/*
+!output/pcap/.gitkeep

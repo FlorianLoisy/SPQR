@@ -4,12 +4,28 @@
     "icmp_code": 0,
     "payload": "SPQR-ICMP-TEST",
     "count": 4,
-    "id": 12345
+    "id": 12345,
+    "src_mac": "02:42:ac:11:00:02",
+    "dst_mac": "02:42:ac:11:00:03"
   },
   "attacks": {
+    "custom": {
+      "description": "Configuration personnalisée ICMP",
+      "parameters": {}
+    },
     "ping_flood": {
-      "count": 1000,
-      "payload": "X" * 1400
+      "description": "Attaque par flood ICMP",
+      "parameters": {
+        "count": 1000,
+        "payload": "X"
+      }
+    },
+    "port_scan": {
+      "description": "Scan de ports via ICMP",
+      "parameters": {
+        "icmp_type": 3,
+        "icmp_code": 3
+      }
     }
   }
 }

@@ -7,9 +7,7 @@
     "host": "example.com",
     "user_agent": "SPQR-Test-Agent",
     "custom_headers": {},
-    "body": "",
-    "src_mac": "02:42:ac:11:00:02",
-    "dst_mac": "02:42:ac:11:00:03"
+    "body": ""
   },
   "attacks": {
     "web_attack": {
@@ -17,9 +15,14 @@
       "path": "/login",
       "body": "username=admin&password=123456"
     },
-    "sql_injection": {
-      "path": "/search?q=1' OR '1'='1",
-      "method": "GET"
+    "data_exfiltration": {
+      "method": "POST",
+      "path": "/upload",
+      "body": "data=sensitive_information"
+    },
+    "malware_c2": {
+      "path": "/command",
+      "user_agent": "MalwareBot/1.0"
     }
   }
 }

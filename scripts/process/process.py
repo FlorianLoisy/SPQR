@@ -6,15 +6,10 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
+from scapy.all import wrpcap
+from scripts.generate_traffic import ProtocolGeneratorFactory
 
-from scripts.generate_traffic.spqrlib import (
-    PcapGenerator, FlowGenerator, generate_pcap
-)  # Assurez-vous que le nom du fichier est correct
-from scripts.generate_path.folder import FolderGenerator
-from ..generate_traffic.protocol_factory import ProtocolGeneratorFactory
-
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("SPQR")
 
 '''
@@ -230,39 +225,40 @@ class SPQRSimple:
             ]
             return subprocess.run(cmd, check=True)
 
-    def generate_pcap(self, attack_type: str, config: dict = None) -> dict:
-        try:
-            if config is None:
-                config = {
-                    "network": self.config["network"],
-                    "protocol": {},
-                    "options": {"packet_count": 10, "time_interval": 100}
-                }
+    def generate_report(self, log_file: str) -> str:
+        report_dir = Path(self.config["output"]["reports_dir"])
+        os.makedirs(report_dir, exist_ok=True)
+        timestamp = self.get_timestamp()
+        report_path = report_dir / f"report_{timestamp}.txt"
 
-            # Déterminer le type de protocole à partir du type d'attaque
-            protocol_type = self.config["traffic_patterns"][attack_type].get("payload_type", "http")
-            
-            # Créer le générateur approprié
-            generator = ProtocolGeneratorFactory.create_generator(
-                protocol_type,
-                {**config["network"], **config["protocol"]}
-            )
-            
-            # Générer les paquets
-            packets = generator.generate()
-            
-            # Sauvegarder en PCAP
-            output_dir = Path(self.config["pcap"]["output_dir"])
-            output_dir.mkdir(parents=True, exist_ok=True)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            pcap_file = output_dir / f"{attack_type}_{timestamp}.pcap"
-            
-            wrpcap(str(pcap_file), packets)
-            
-            return {"pcap_file": str(pcap_file)}
+        alerts_count = 0
+        unique_sids = set()
+
+        try:
+            with open(log_file, "r") as f:
+                for line in f:
+                    if line.strip():
+                        try:
+                            entry = json.loads(line)
+                            if entry.get("event_type") == "alert":
+                                alerts_count += 1
+                                sid = entry.get("alert", {}).get("signature_id")
+                                if sid:
+                                    unique_sids.add(sid)
+                        except json.JSONDecodeError:
+                            continue
+
+            with open(report_path, "w") as rpt:
+                rpt.write(f"=== RAPPORT SPQR ===\n")
+                rpt.write(f"Timestamp: {timestamp}\n")
+                rpt.write(f"Fichier de log: {log_file}\n")
+                rpt.write(f"Nombre total d'alertes: {alerts_count}\n")
+                rpt.write(f"SIDs uniques: {sorted(unique_sids)}\n")
+
+            return str(report_path)
         except Exception as e:
-            logger.error(f"Error generating PCAP: {str(e)}")
-            return {"error": str(e)}
+            logger.error(f"Erreur lors de la génération du rapport : {e}")
+            return None
 
     def test_with_engine(self, pcap_file: str, engine_type: str, version: str) -> Dict:
         """Test PCAP with specific engine"""
@@ -289,6 +285,40 @@ class SPQRSimple:
                 "alert_count": alert_count
             }
         except Exception as e:
+            return {"error": str(e)}
+
+    def generate_pcap(self, attack_type: str, config: dict = None) -> dict:
+        try:
+            if config is None:
+                config = {
+                    "network": self.config["network"],
+                    "protocol": {},
+                    "options": {"packet_count": 10, "time_interval": 100}
+                }
+
+            # Get protocol type from attack configuration
+            protocol_type = self.config["traffic_patterns"][attack_type].get("payload_type", "http")
+
+            # Create generator instance
+            generator = ProtocolGeneratorFactory.create_generator(
+                protocol_type=protocol_type,
+                config={**config["network"], **config["protocol"]}
+            )
+
+            # Generate packets
+            packets = generator.generate()
+
+            # Save to PCAP file
+            output_dir = Path(self.config["pcap"]["output_dir"])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            pcap_file = output_dir / f"{attack_type}_{timestamp}.pcap"
+            
+            wrpcap(str(pcap_file), packets)
+            return {"pcap_file": str(pcap_file)}
+
+        except Exception as e:
+            logger.error(f"Error generating PCAP: {str(e)}")
             return {"error": str(e)}
 
 class SuricataExecution:
