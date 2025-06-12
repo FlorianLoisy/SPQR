@@ -24,7 +24,8 @@
   "engines": [
   { "type": "suricata", "version": "6.0.15", "mode": "docker" },
   { "type": "suricata", "version": "7.0.2", "mode": "docker" },
-  { "type": "snort", "version": "2.9", "mode": "docker" }
+  { "type": "snort", "version": "2.9", "mode": "docker" },
+  { "type": "snort", "version": "3", "mode": "docker" }
   ],
   "output": {
     "pcap_dir": "output/pcap",
