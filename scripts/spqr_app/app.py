@@ -573,8 +573,20 @@ def show_ids_testing():
         progress_text = progress_container.empty()
         progress_bar = progress_container.progress(0)
 
+        # Créer un conteneur pour les statuts d'analyse
+        status_cols = st.columns(len(selected_engines))
+        status_indicators = {}
+
+        # Initialiser les indicateurs de statut pour chaque moteur
+        for idx, engine in enumerate(selected_engines):
+            with status_cols[idx]:
+                st.markdown(f"##### {engine}")
+                status_indicators[engine] = st.empty()
+                status_indicators[engine].info("⏳ En attente...")
+        
         for idx, engine in enumerate(selected_engines):
             progress_text.text(f"Analyse avec {engine}... ({idx + 1}/{len(selected_engines)})")
+            status_indicators[engine].warning("🔄 En cours d'analyse...")
             
             try:
                 engine_rule = engine_rules.get(engine, {})
@@ -601,6 +613,7 @@ def show_ids_testing():
                     )
                 analysis_results[engine] = results
                 analysis_stats["success"] += 1
+                status_indicators[engine].success("✅ Analyse terminée")
             except Exception as e:
                 error_details = {
                     "message": str(e),
@@ -615,6 +628,7 @@ def show_ids_testing():
                 analysis_errors[engine] = error_details
                 analysis_stats["failed"] += 1
                 logger.error(f"Error analyzing with {engine}: {str(e)}")
+                status_indicators[engine].error("❌ Erreur")
             finally:
                 progress_bar.progress((idx + 1) / len(selected_engines))
 
@@ -720,7 +734,7 @@ def main():
         st.title("SPQR Navigation")
         selected = st.radio(
             "Navigation",
-            ["Accueil", "Génération PCAP", "Test de règle IDS", "Configuration Protocoles"]
+            ["Accueil", "Génération PCAP", "Test de règle IDS"]
         )
         st.session_state.page = selected
 
@@ -731,8 +745,6 @@ def main():
         show_pcap_generation()
     elif st.session_state.page == "Test de règle IDS":
         show_ids_testing()
-    elif st.session_state.page == "Configuration Protocoles":
-        show_protocol_config()
 
 if __name__ == "__main__":
     main()
