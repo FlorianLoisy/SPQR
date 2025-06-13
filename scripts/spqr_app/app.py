@@ -445,81 +445,7 @@ def show_protocol_config():
 def show_ids_testing():
     st.header("🔍 Test de règle IDS")
     
-    # Sélection du fichier PCAP
-    pcap_col, rules_col = st.columns(2)
-    
-    with pcap_col:
-        st.subheader("Sélection du PCAP")
-        pcap_source = st.radio(
-            "Source du fichier PCAP",
-            ["Fichier local", "Fichier généré"],
-            help="Choisir un fichier PCAP local ou un fichier précédemment généré"
-        )
-        
-        if pcap_source == "Fichier local":
-            uploaded_pcap = st.file_uploader(
-                "Charger un fichier PCAP",
-                type=["pcap", "pcapng"],
-                help="Glisser-déposer ou sélectionner un fichier PCAP"
-            )
-            pcap_path = uploaded_pcap.name if uploaded_pcap else None
-        else:
-            # Liste des PCAPs générés
-            pcap_dir = Path("/data/output/pcap")
-            pcap_files = list(pcap_dir.glob("*.pcap"))
-            if pcap_files:
-                pcap_path = st.selectbox(
-                    "Sélectionner un PCAP généré",
-                    pcap_files,
-                    format_func=lambda x: x.name
-                )
-            else:
-                st.warning("Aucun fichier PCAP généré trouvé")
-                pcap_path = None
-    
-    with rules_col:
-        st.subheader("Configuration des règles")
-        rule_source = st.radio(
-            "Source des règles",
-            ["Règles par défaut", "Règle personnalisée", "Fichier de règles"],
-            help="Choisir la source des règles IDS à tester"
-        )
-        
-        # Initialize variables
-        selected_rules = None
-        custom_rule = None
-        uploaded_rules = None
-        
-        if rule_source == "Règles par défaut":
-            # Sélection de l'IDS
-            ids_type = st.selectbox(
-                "Sélectionner l'IDS",
-                ["Suricata 6.0.15", "Suricata 7.0.2", "Snort 2.9", "Snort 3"]
-            )
-            # Liste des fichiers de règles disponibles
-            rules_dir = Path(f"config/{ids_type.lower().replace(' ', '')}/rules")
-            rule_files = list(rules_dir.glob("*.rules"))
-            selected_rules = st.multiselect(
-                "Sélectionner les fichiers de règles",
-                rule_files,
-                format_func=lambda x: x.name
-            )
-            
-        elif rule_source == "Règle personnalisée":
-            custom_rule = st.text_area(
-                "Entrer la règle IDS",
-                height=100,
-                help="Entrer une règle au format Suricata/Snort"
-            )
-            
-        else:  # Fichier de règles
-            uploaded_rules = st.file_uploader(
-                "Charger un fichier de règles",
-                type=["rules", "txt"],
-                help="Glisser-déposer ou sélectionner un fichier de règles"
-            )
-
-    # Sélection des sondes IDS à utiliser
+    # Sélection des sondes IDS d'abord pour organiser l'interface
     st.subheader("Sélection des sondes IDS")
     selected_engines = st.multiselect(
         "Sélectionner les sondes IDS à utiliser",
@@ -527,7 +453,103 @@ def show_ids_testing():
         help="Choisir une ou plusieurs sondes IDS pour l'analyse"
     )
 
-    # Affichage des résultats et erreurs
+    # Sélection du fichier PCAP
+    st.subheader("Sélection du PCAP")
+    pcap_source = st.radio(
+        "Source du fichier PCAP",
+        ["Fichier local", "Fichier généré"],
+        help="Choisir un fichier PCAP local ou un fichier précédemment généré"
+    )
+    
+    if pcap_source == "Fichier local":
+        uploaded_pcap = st.file_uploader(
+            "Charger un fichier PCAP",
+            type=["pcap", "pcapng"],
+            help="Glisser-déposer ou sélectionner un fichier PCAP"
+        )
+        if uploaded_pcap:
+            # Sauvegarder le fichier temporairement
+            temp_pcap = Path("output/temp") / uploaded_pcap.name
+            temp_pcap.parent.mkdir(parents=True, exist_ok=True)
+            temp_pcap.write_bytes(uploaded_pcap.getvalue())
+            pcap_path = temp_pcap
+        else:
+            pcap_path = None
+    else:
+        # Liste des PCAPs générés
+        pcap_dir = Path("/data/output/pcap")
+        pcap_files = list(pcap_dir.glob("*.pcap"))
+        if pcap_files:
+            pcap_path = st.selectbox(
+                "Sélectionner un PCAP généré",
+                pcap_files,
+                format_func=lambda x: x.name
+            )
+        else:
+            st.warning("Aucun fichier PCAP généré trouvé")
+            pcap_path = None
+
+    # Configuration des règles par IDS sélectionné
+    if selected_engines:
+        st.subheader("Configuration des règles par IDS")
+        
+        # Créer des colonnes en fonction du nombre d'IDS sélectionnés
+        rule_cols = st.columns(len(selected_engines))
+        
+        # Dictionnaire pour stocker les configurations de règles par moteur
+        engine_rules = {}
+        
+        for idx, engine in enumerate(selected_engines):
+            with rule_cols[idx]:
+                st.markdown(f"##### {engine}")
+                rule_source = st.radio(
+                    f"Source des règles pour {engine}",
+                    ["Règles par défaut", "Règle personnalisée", "Fichier de règles"],
+                    key=f"rule_source_{engine}",
+                    help=f"Choisir la source des règles pour {engine}"
+                )
+                
+                if rule_source == "Règles par défaut":
+                    # Liste des fichiers de règles disponibles pour cet IDS
+                    engine_path = engine.lower().replace(" ", "_")
+                    rules_dir = Path(f"config/{engine_path}/rules")
+                    rule_files = list(rules_dir.glob("*.rules"))
+                    selected_rules = st.multiselect(
+                        "Fichiers de règles",
+                        rule_files,
+                        format_func=lambda x: x.name,
+                        key=f"rules_{engine}"
+                    )
+                    engine_rules[engine] = {
+                        "type": "default",
+                        "rules": selected_rules
+                    }
+                    
+                elif rule_source == "Règle personnalisée":
+                    custom_rule = st.text_area(
+                        "Règle personnalisée",
+                        key=f"custom_{engine}",
+                        height=100,
+                        help="Entrer une règle au format Suricata/Snort"
+                    )
+                    engine_rules[engine] = {
+                        "type": "custom",
+                        "rules": custom_rule
+                    }
+                    
+                else:  # Fichier de règles
+                    uploaded_rules = st.file_uploader(
+                        "Fichier de règles",
+                        type=["rules", "txt"],
+                        key=f"upload_{engine}",
+                        help="Charger un fichier de règles"
+                    )
+                    engine_rules[engine] = {
+                        "type": "file",
+                        "rules": uploaded_rules
+                    }
+
+    # Bouton d'analyse
     if st.button("🚀 Lancer l'analyse"):
         if not pcap_path:
             st.error("Veuillez sélectionner un fichier PCAP")
@@ -535,17 +557,6 @@ def show_ids_testing():
             
         if not selected_engines:
             st.error("Veuillez sélectionner au moins une sonde IDS")
-            return
-
-        # Vérifier qu'une source de règles est sélectionnée
-        if rule_source == "Règles par défaut" and not selected_rules:
-            st.error("Veuillez sélectionner au moins un fichier de règles")
-            return
-        elif rule_source == "Règle personnalisée" and not custom_rule:
-            st.error("Veuillez entrer une règle personnalisée")
-            return
-        elif rule_source == "Fichier de règles" and not uploaded_rules:
-            st.error("Veuillez sélectionner un fichier de règles")
             return
 
         # Conteneurs pour les résultats
@@ -566,15 +577,30 @@ def show_ids_testing():
             progress_text.text(f"Analyse avec {engine}... ({idx + 1}/{len(selected_engines)})")
             
             try:
-                results = spqr_web.analyze_pcap(
-                    pcap_path=pcap_path,
-                    engine=engine,
-                    rules=selected_rules if rule_source == "Règles par défaut" else custom_rule,
-                    custom_rules_file=uploaded_rules if rule_source == "Fichier de règles" else None
-                )
+                engine_rule = engine_rules.get(engine, {})
+                if engine_rule["type"] == "default":
+                    results = spqr_web.analyze_pcap(
+                        pcap_path=str(pcap_path),
+                        engine=engine,
+                        rules=None,
+                        custom_rules_file=None
+                    )
+                elif engine_rule["type"] == "custom":
+                    results = spqr_web.analyze_pcap(
+                        pcap_path=str(pcap_path),
+                        engine=engine,
+                        rules=engine_rule["rules"],
+                        custom_rules_file=None
+                    )
+                else:  # file
+                    results = spqr_web.analyze_pcap(
+                        pcap_path=str(pcap_path),
+                        engine=engine,
+                        rules=None,
+                        custom_rules_file=engine_rule["rules"]
+                    )
                 analysis_results[engine] = results
                 analysis_stats["success"] += 1
-                
             except Exception as e:
                 error_details = {
                     "message": str(e),
@@ -582,76 +608,15 @@ def show_ids_testing():
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "context": {
                         "pcap": str(pcap_path),
-                        "rules_source": rule_source,
-                        "selected_rules": str(selected_rules) if selected_rules else None
+                        "rules_source": engine_rule["type"],
+                        "selected_rules": str(engine_rule.get("rules"))
                     }
                 }
                 analysis_errors[engine] = error_details
                 analysis_stats["failed"] += 1
                 logger.error(f"Error analyzing with {engine}: {str(e)}")
-            
             finally:
                 progress_bar.progress((idx + 1) / len(selected_engines))
-
-        # Affichage du résumé
-        st.subheader("📊 Résumé de l'analyse")
-        summary_cols = st.columns(4)
-        with summary_cols[0]:
-            st.metric("Total des analyses", analysis_stats["total"])
-        with summary_cols[1]:
-            st.metric("Réussies", analysis_stats["success"], delta=analysis_stats["success"])
-        with summary_cols[2]:
-            st.metric("Échouées", analysis_stats["failed"], delta=-analysis_stats["failed"])
-        with summary_cols[3]:
-            st.metric("Taux de succès", f"{(analysis_stats['success']/analysis_stats['total'])*100:.1f}%")
-
-        # Affichage détaillé des résultats et erreurs
-        if analysis_results or analysis_errors:
-            tab1, tab2 = st.tabs(["✅ Résultats", "❌ Erreurs"])
-            
-            with tab1:
-                if analysis_results:
-                    for engine, results in analysis_results.items():
-                        with st.expander(f"Résultats - {engine}", expanded=True):
-                            if results.get("alerts"):
-                                df = pd.DataFrame(results["alerts"])
-                                st.dataframe(df)
-                                
-                                csv = df.to_csv(index=False)
-                                st.download_button(
-                                    label="📥 Télécharger les résultats (CSV)",
-                                    data=csv,
-                                    file_name=f"alerts_{engine.lower().replace(' ', '_')}.csv",
-                                    mime="text/csv"
-                                )
-                            else:
-                                st.info("Aucune alerte détectée")
-                else:
-                    st.warning("Aucune analyse réussie")
-            
-            with tab2:
-                if analysis_errors:
-                    for engine, error in analysis_errors.items():
-                        with st.expander(f"Erreur - {engine}", expanded=True):
-                            st.error(f"Type d'erreur: {error['type']}")
-                            st.code(error['message'])
-                            st.json(error['context'])
-                            
-                    # Générer un rapport d'erreur détaillé
-                    error_report = {
-                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "summary": analysis_stats,
-                        "errors": analysis_errors
-                    }
-                    
-                    st.download_button(
-                        label="📥 Télécharger le rapport d'erreurs complet",
-                        data=json.dumps(error_report, indent=2),
-                        file_name=f"error_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                        mime="application/json"
-                    )
-                else:
-                    st.success("Aucune erreur détectée")
 
 def show_home():
     """Affiche la page d'accueil de SPQR"""
