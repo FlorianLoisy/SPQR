@@ -725,11 +725,9 @@ def show_home():
         - Trafic HTTP, DNS, ICMP et QUIC
         - Configuration personnalisée
         - Export au format PCAP
-        """)
         
-        if st.button("Lancer le générateur", use_container_width=True):
-            st.session_state.page = "Génération PCAP"
-            st.experimental_rerun()
+        > Utilisez la navigation latérale pour accéder au générateur
+        """)
 
     with module_col2:
         st.markdown("""
@@ -739,11 +737,9 @@ def show_home():
         - Support Suricata et Snort
         - Règles personnalisées
         - Analyse des alertes
-        """)
         
-        if st.button("Tester des règles", use_container_width=True):
-            st.session_state.page = "Test de règle IDS"
-            st.experimental_rerun()
+        > Utilisez la navigation latérale pour accéder au testeur
+        """)
 
     # Statistiques
     st.markdown("## 📊 Statistiques")
