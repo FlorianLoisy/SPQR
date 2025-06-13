@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   streamlit:
     build: 
@@ -13,9 +11,13 @@ services:
       - ./scripts:/app/scripts
       - ./config:/app/config
       - ./output:/data/output
+      - /var/run/docker.sock:/var/run/docker.sock  # Add Docker socket mount
     environment:
       - PYTHONPATH=/app
       - PCAP_OUTPUT_DIR=/data/output/pcap
+    # Add Docker group to container
+    group_add:
+      - "${DOCKER_GROUP_ID:-999}"  # Default Docker group ID if not specified
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
       interval: 30s
@@ -33,7 +35,7 @@ services:
       context: ./images_docker/Docker_Suricata-6.0.15
       dockerfile: Dockerfile
     container_name: suricata6015
-    image: spqr_suricata_6.0.15
+    image: spqr_suricata6015  # Changed to match the Python code
     volumes:
       - ./config:/data/config:ro
       - ./input:/data/input:ro
@@ -47,7 +49,7 @@ services:
       context: ./images_docker/Docker_Suricata-7.0.2
       dockerfile: Dockerfile
     container_name: suricata702
-    image: spqr_suricata_7.0.2
+    image: spqr_suricata702  # Changed to match the Python code
     volumes:
       - ./config:/data/config:ro
       - ./input:/data/input:ro
@@ -60,7 +62,7 @@ services:
       context: ./images_docker/Docker_Snort-2.9
       dockerfile: Dockerfile
     container_name: snort29
-    image: spqr_snort_2.9
+    image: spqr_snort29  # Changed to match the Python code
     volumes:
       - ./config:/data/config:ro
       - ./input:/data/input:ro
@@ -70,7 +72,7 @@ services:
     build:
       context: ./images_docker/Docker_Snort-3
       dockerfile: Dockerfile
-    image: spqr_snort_3
+    image: spqr_snort3  # Changed to match the Python code
     container_name: snort3
     volumes:
       - ./config:/data/config:ro
