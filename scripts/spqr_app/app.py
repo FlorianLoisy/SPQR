@@ -57,80 +57,8 @@ class SPQRWeb:
         ])
 
     def analyze_pcap(self, pcap_path: str, engine: str, rules: str = None, custom_rules_file: str = None) -> dict:
-        """Analyse un fichier PCAP avec une sonde IDS"""
-        try:
-            # Extraire le nom et la version du moteur
-            engine_name, version = engine.lower().split()
-            container_name = f"{engine_name}{version.replace('.', '')}"
-            
-            # Préparer le dossier temporaire pour les règles
-            temp_rules_dir = Path(f"/tmp/spqr_rules_{container_name}")
-            temp_rules_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Préparer le fichier de règles
-            if custom_rules_file:
-                # Utiliser le fichier uploadé
-                rules_path = temp_rules_dir / "custom.rules"
-                rules_path.write_bytes(custom_rules_file.getvalue())
-            elif rules and isinstance(rules, str):
-                # Utiliser la règle personnalisée
-                rules_path = temp_rules_dir / "custom.rules"
-                rules_path.write_text(rules)
-            else:
-                # Utiliser les règles par défaut sélectionnées
-                rules_path = Path(f"config/{engine_name}_{version}/rules/suricata.rules")
-            
-            # Vérifier que le conteneur est en cours d'exécution
-            cmd_check = ["docker", "container", "inspect", container_name]
-            result = subprocess.run(cmd_check, capture_output=True)
-            
-            if result.returncode != 0:
-                raise RuntimeError(f"Le conteneur {container_name} n'est pas en cours d'exécution")
-            
-            # Copier le PCAP dans le conteneur
-            cmd_copy = ["docker", "cp", str(pcap_path), f"{container_name}:/tmp/analysis.pcap"]
-            subprocess.run(cmd_copy, check=True)
-            
-            # Copier les règles dans le conteneur
-            cmd_copy_rules = ["docker", "cp", str(rules_path), f"{container_name}:/etc/suricata/rules/analysis.rules"]
-            subprocess.run(cmd_copy_rules, check=True)
-            
-            # Lancer l'analyse
-            if engine_name == "suricata":
-                cmd_analyze = [
-                    "docker", "exec", container_name,
-                    "suricata", "-c", "/etc/suricata/suricata.yaml",
-                    "-r", "/tmp/analysis.pcap",
-                    "-S", "/etc/suricata/rules/analysis.rules",
-                    "-l", "/var/log/suricata"
-                ]
-            else:  # snort
-                cmd_analyze = [
-                    "docker", "exec", container_name,
-                    "snort", "-c", "/etc/snort/snort.conf",
-                    "-r", "/tmp/analysis.pcap",
-                    "-l", "/var/log/snort"
-                ]
-            
-            subprocess.run(cmd_analyze, check=True)
-            
-            # Récupérer et parser les résultats
-            if engine_name == "suricata":
-                log_file = "/var/log/suricata/fast.log"
-            else:
-                log_file = "/var/log/snort/alert"
-                
-            cmd_results = ["docker", "exec", container_name, "cat", log_file]
-            result = subprocess.run(cmd_results, capture_output=True, text=True)
-            
-            # Parser les alertes
-            alerts = self._parse_ids_alerts(result.stdout, engine_name)
-            
-            return {"alerts": alerts}
-            
-        except Exception as e:
-            logger.error(f"Error during IDS analysis: {str(e)}")
-            raise
+        """Wrapper pour l'analyse PCAP, délègue à SPQRSimple"""
+        return self.spqr.analyze_pcap(pcap_path, engine, rules, custom_rules_file)
 
     def _parse_ids_alerts(self, log_content: str, engine_type: str) -> list:
         """Parse les alertes IDS depuis le contenu du log"""
@@ -599,7 +527,7 @@ def show_ids_testing():
         help="Choisir une ou plusieurs sondes IDS pour l'analyse"
     )
 
-    # Bouton d'exécution
+    # Affichage des résultats et erreurs
     if st.button("🚀 Lancer l'analyse"):
         if not pcap_path:
             st.error("Veuillez sélectionner un fichier PCAP")
@@ -608,7 +536,7 @@ def show_ids_testing():
         if not selected_engines:
             st.error("Veuillez sélectionner au moins une sonde IDS")
             return
-            
+
         # Vérifier qu'une source de règles est sélectionnée
         if rule_source == "Règles par défaut" and not selected_rules:
             st.error("Veuillez sélectionner au moins un fichier de règles")
@@ -620,81 +548,110 @@ def show_ids_testing():
             st.error("Veuillez sélectionner un fichier de règles")
             return
 
-        # Conteneur pour stocker les erreurs
-        analysis_errors = {}
+        # Conteneurs pour les résultats
         analysis_results = {}
-            
-        # Analyse avec chaque sonde sélectionnée
-        progress_text = "Analyse en cours..."
-        progress_bar = st.progress(0)
-        
-        for idx, engine in enumerate(selected_engines):
-            with st.spinner(f"Analyse avec {engine}..."):
-                try:
-                    results = spqr_web.analyze_pcap(
-                        pcap_path=pcap_path,
-                        engine=engine,
-                        rules=selected_rules if rule_source == "Règles par défaut" else custom_rule,
-                        custom_rules_file=uploaded_rules if rule_source == "Fichier de règles" else None
-                    )
-                    analysis_results[engine] = results
-                    
-                except Exception as e:
-                    logger.error(f"Error during analysis with {engine}: {str(e)}")
-                    analysis_errors[engine] = str(e)
-                
-                finally:
-                    # Mise à jour de la barre de progression
-                    progress = (idx + 1) / len(selected_engines)
-                    progress_bar.progress(progress)
+        analysis_errors = {}
+        analysis_stats = {
+            "total": len(selected_engines),
+            "success": 0,
+            "failed": 0
+        }
 
-        # Affichage des résultats dans des onglets
+        # Analyse avec chaque sonde sélectionnée
+        progress_container = st.container()
+        progress_text = progress_container.empty()
+        progress_bar = progress_container.progress(0)
+
+        for idx, engine in enumerate(selected_engines):
+            progress_text.text(f"Analyse avec {engine}... ({idx + 1}/{len(selected_engines)})")
+            
+            try:
+                results = spqr_web.analyze_pcap(
+                    pcap_path=pcap_path,
+                    engine=engine,
+                    rules=selected_rules if rule_source == "Règles par défaut" else custom_rule,
+                    custom_rules_file=uploaded_rules if rule_source == "Fichier de règles" else None
+                )
+                analysis_results[engine] = results
+                analysis_stats["success"] += 1
+                
+            except Exception as e:
+                error_details = {
+                    "message": str(e),
+                    "type": type(e).__name__,
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "context": {
+                        "pcap": str(pcap_path),
+                        "rules_source": rule_source,
+                        "selected_rules": str(selected_rules) if selected_rules else None
+                    }
+                }
+                analysis_errors[engine] = error_details
+                analysis_stats["failed"] += 1
+                logger.error(f"Error analyzing with {engine}: {str(e)}")
+            
+            finally:
+                progress_bar.progress((idx + 1) / len(selected_engines))
+
+        # Affichage du résumé
+        st.subheader("📊 Résumé de l'analyse")
+        summary_cols = st.columns(4)
+        with summary_cols[0]:
+            st.metric("Total des analyses", analysis_stats["total"])
+        with summary_cols[1]:
+            st.metric("Réussies", analysis_stats["success"], delta=analysis_stats["success"])
+        with summary_cols[2]:
+            st.metric("Échouées", analysis_stats["failed"], delta=-analysis_stats["failed"])
+        with summary_cols[3]:
+            st.metric("Taux de succès", f"{(analysis_stats['success']/analysis_stats['total'])*100:.1f}%")
+
+        # Affichage détaillé des résultats et erreurs
         if analysis_results or analysis_errors:
-            tabs = []
-            if analysis_results:
-                tabs.append("Résultats")
-            if analysis_errors:
-                tabs.append("Erreurs")
+            tab1, tab2 = st.tabs(["✅ Résultats", "❌ Erreurs"])
             
-            current_tab = st.radio("", tabs)
+            with tab1:
+                if analysis_results:
+                    for engine, results in analysis_results.items():
+                        with st.expander(f"Résultats - {engine}", expanded=True):
+                            if results.get("alerts"):
+                                df = pd.DataFrame(results["alerts"])
+                                st.dataframe(df)
+                                
+                                csv = df.to_csv(index=False)
+                                st.download_button(
+                                    label="📥 Télécharger les résultats (CSV)",
+                                    data=csv,
+                                    file_name=f"alerts_{engine.lower().replace(' ', '_')}.csv",
+                                    mime="text/csv"
+                                )
+                            else:
+                                st.info("Aucune alerte détectée")
+                else:
+                    st.warning("Aucune analyse réussie")
             
-            if current_tab == "Résultats":
-                st.subheader("📊 Résultats d'analyse")
-                for engine, results in analysis_results.items():
-                    with st.expander(f"Résultats - {engine}", expanded=True):
-                        if results.get("alerts"):
-                            df = pd.DataFrame(results["alerts"])
-                            st.dataframe(df)
-                            
-                            # Export CSV
-                            csv = df.to_csv(index=False)
-                            st.download_button(
-                                label="📥 Télécharger les résultats (CSV)",
-                                data=csv,
-                                file_name=f"alerts_{engine.lower().replace(' ', '_')}.csv",
-                                mime="text/csv"
-                            )
-                        else:
-                            st.info("Aucune alerte détectée")
-            
-            elif current_tab == "Erreurs":
-                st.subheader("❌ Erreurs d'analyse")
-                for engine, error in analysis_errors.items():
-                    with st.error(f"Erreur lors de l'analyse avec {engine}"):
-                        st.code(error)
-                        
-                # Export du rapport d'erreur
+            with tab2:
                 if analysis_errors:
-                    error_report = "\n\n".join([
-                        f"Engine: {engine}\nError: {error}"
-                        for engine, error in analysis_errors.items()
-                    ])
+                    for engine, error in analysis_errors.items():
+                        with st.expander(f"Erreur - {engine}", expanded=True):
+                            st.error(f"Type d'erreur: {error['type']}")
+                            st.code(error['message'])
+                            st.json(error['context'])
+                            
+                    # Générer un rapport d'erreur détaillé
+                    error_report = {
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "summary": analysis_stats,
+                        "errors": analysis_errors
+                    }
+                    
                     st.download_button(
-                        label="📥 Télécharger le rapport d'erreurs",
-                        data=error_report,
-                        file_name="error_report.txt",
-                        mime="text/plain"
+                        label="📥 Télécharger le rapport d'erreurs complet",
+                        data=json.dumps(error_report, indent=2),
+                        file_name=f"error_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                        mime="application/json"
                     )
+                else:
+                    st.success("Aucune erreur détectée")
 
 def show_home():
     """Affiche la page d'accueil de SPQR"""

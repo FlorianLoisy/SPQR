@@ -359,24 +359,8 @@ class SPQRSimple:
 
     def analyze_pcap(self, pcap_path: str, engine: str, rules: str = None, custom_rules_file: str = None) -> dict:
         """
-        Analyze a PCAP file using specified IDS engine.
-
-        Args:
-            pcap_path (str): Path to the PCAP file to analyze
-            engine (str): IDS engine to use (format: "name version", e.g., "suricata 6.0.15")
-            rules (str, optional): Custom rules content as string
-            custom_rules_file (str, optional): Path to custom rules file
-
-        Returns:
-            dict: Analysis results containing alerts or errors
-                Format: {
-                    "alerts": List[dict],  # List of alerts found
-                    "warning": str         # Optional warning message
-                }
-
-        Raises:
-            RuntimeError: If analysis fails
-            FileNotFoundError: If required files are missing
+        Analyse un fichier PCAP avec une sonde IDS.
+        Gère toute la logique Docker et l'exécution des conteneurs.
         """
         try:
             # Extract engine name and version
@@ -403,52 +387,70 @@ class SPQRSimple:
                     else:
                         raise FileNotFoundError(f"No rules found at {default_rules}")
 
-                # Run analysis with docker run
-                cmd = [
-                    "docker", "run", "--rm",  # Remove container after execution
-                    "-v", f"{pcap_path.absolute()}:/input.pcap:ro",
-                    "-v", f"{rules_path.absolute()}:/rules/custom.rules:ro",
-                    "-v", f"{log_dir.absolute()}:/var/log/{engine_name}",
-                    image_name
-                ]
+                # Run IDS analysis
+                result = self._run_ids_container(
+                    engine_name=engine_name,
+                    image_name=image_name,
+                    pcap_path=pcap_path,
+                    rules_path=rules_path,
+                    log_dir=log_dir
+                )
 
-                if engine_name == "suricata":
-                    cmd.extend([
-                        "suricata",
-                        "-c", "/etc/suricata/suricata.yaml",
-                        "-S", "/rules/custom.rules",
-                        "-r", "/input.pcap",
-                        "-l", f"/var/log/{engine_name}"
-                    ])
-                else:  # snort
-                    cmd.extend([
-                        "snort",
-                        "-c", "/etc/snort/snort.conf",
-                        "-r", "/input.pcap",
-                        "-l", f"/var/log/{engine_name}"
-                    ])
-
-                # Execute analysis
-                logger.debug(f"Running command: {' '.join(cmd)}")
-                result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-
-                # Parse results
-                log_file = log_dir / ("fast.log" if engine_name == "suricata" else "alert")
-                if not log_file.exists():
-                    return {"alerts": [], "warning": "No alerts generated"}
-
-                alerts = self._parse_ids_alerts(log_file.read_text(), engine_name)
-                return {"alerts": alerts}
+                return result
 
             finally:
-                # Cleanup temporary files
+                # Cleanup
                 import shutil
                 if temp_dir.exists():
                     shutil.rmtree(temp_dir)
 
+        except Exception as e:
+            logger.error(f"Error during analysis: {str(e)}")
+            raise
+
+    def _run_ids_container(self, engine_name: str, image_name: str, pcap_path: str, 
+                          rules_path: Path, log_dir: Path) -> dict:
+        """Exécute l'analyse IDS dans un conteneur Docker"""
+        try:
+            # Build docker command
+            cmd = [
+                "docker", "run", "--rm",
+                "-v", f"{pcap_path}:/input.pcap:ro",
+                "-v", f"{rules_path}:/etc/suricata/rules/custom.rules:ro",
+                "-v", f"{log_dir}:/var/log/{engine_name}",
+                image_name
+            ]
+
+            if engine_name == "suricata":
+                cmd.extend([
+                    "suricata",
+                    "-c", "/etc/suricata/suricata.yaml",
+                    "-S", "/etc/suricata/rules/custom.rules",
+                    "-r", "/input.pcap",
+                    "-l", "/var/log/suricata"
+                ])
+            else:  # snort
+                cmd.extend([
+                    "snort",
+                    "-c", "/etc/snort/snort.conf",
+                    "-r", "/input.pcap",
+                    "-l", "/var/log/snort"
+                ])
+
+            # Execute analysis
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+
+            # Parse results
+            log_file = log_dir / ("fast.log" if engine_name == "suricata" else "alert")
+            if not log_file.exists():
+                return {"alerts": [], "warning": "No alerts generated"}
+
+            alerts = self._parse_ids_alerts(log_file.read_text(), engine_name)
+            return {"alerts": alerts}
+
         except subprocess.CalledProcessError as e:
-            logger.error(f"Command failed: {e.stdout}\n{e.stderr}")
-            raise RuntimeError(f"Analysis failed for {engine}: {e.stderr}")
+            logger.error(f"Docker command failed: {e.stdout}\n{e.stderr}")
+            raise RuntimeError(f"Analysis failed: {e.stderr}")
         except Exception as e:
             logger.error(f"Error during analysis: {str(e)}")
             raise
