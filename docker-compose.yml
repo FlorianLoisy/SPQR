@@ -35,11 +35,11 @@ services:
       context: ./images_docker/Docker_Suricata-6.0.15
       dockerfile: Dockerfile
     container_name: suricata6015
-    image: spqr_suricata6015  # Changed to match the Python code
+    image: spqr_suricata6015
     volumes:
-      - ./config:/data/config:ro
-      - ./input:/data/input:ro
-      - ./output:/data/output
+      - ./config/suricata_6.0.15/suricata.yaml:/etc/suricata/suricata.yaml:ro
+      - ./config/suricata_6.0.15/rules:/etc/suricata/rules:ro
+      - ./output/logs:/var/log/suricata
     entrypoint: ["/usr/bin/suricata"]
     command: ["-V"]
 
@@ -49,11 +49,11 @@ services:
       context: ./images_docker/Docker_Suricata-7.0.2
       dockerfile: Dockerfile
     container_name: suricata702
-    image: spqr_suricata702  # Changed to match the Python code
+    image: spqr_suricata702
     volumes:
-      - ./config:/data/config:ro
-      - ./input:/data/input:ro
-      - ./output:/data/output
+      - ./config/suricata_7.0.2/suricata.yaml:/etc/suricata/suricata.yaml:ro
+      - ./config/suricata_7.0.2/rules:/etc/suricata/rules:ro
+      - ./output/logs:/var/log/suricata
     entrypoint: ["/usr/bin/suricata"]
     command: ["-V"]
 
