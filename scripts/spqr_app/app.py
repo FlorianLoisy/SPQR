@@ -1,8 +1,10 @@
 import streamlit as st
+import pandas as pd  # Add this import
 import os
 import zipfile
 import json
 import logging
+import subprocess
 from pathlib import Path
 from scripts.process.process import SPQRSimple
 from datetime import datetime
@@ -53,6 +55,127 @@ class SPQRWeb:
             {"type": "snort", "version": "2.9"},
             {"type": "snort", "version": "3"}
         ])
+
+    def analyze_pcap(self, pcap_path: str, engine: str, rules: str = None, custom_rules_file: str = None) -> dict:
+        """Analyse un fichier PCAP avec une sonde IDS"""
+        try:
+            # Extraire le nom et la version du moteur
+            engine_name, version = engine.lower().split()
+            container_name = f"{engine_name}{version.replace('.', '')}"
+            
+            # Préparer le dossier temporaire pour les règles
+            temp_rules_dir = Path(f"/tmp/spqr_rules_{container_name}")
+            temp_rules_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Préparer le fichier de règles
+            if custom_rules_file:
+                # Utiliser le fichier uploadé
+                rules_path = temp_rules_dir / "custom.rules"
+                rules_path.write_bytes(custom_rules_file.getvalue())
+            elif rules and isinstance(rules, str):
+                # Utiliser la règle personnalisée
+                rules_path = temp_rules_dir / "custom.rules"
+                rules_path.write_text(rules)
+            else:
+                # Utiliser les règles par défaut sélectionnées
+                rules_path = Path(f"config/{engine_name}_{version}/rules/suricata.rules")
+            
+            # Vérifier que le conteneur est en cours d'exécution
+            cmd_check = ["docker", "container", "inspect", container_name]
+            result = subprocess.run(cmd_check, capture_output=True)
+            
+            if result.returncode != 0:
+                raise RuntimeError(f"Le conteneur {container_name} n'est pas en cours d'exécution")
+            
+            # Copier le PCAP dans le conteneur
+            cmd_copy = ["docker", "cp", str(pcap_path), f"{container_name}:/tmp/analysis.pcap"]
+            subprocess.run(cmd_copy, check=True)
+            
+            # Copier les règles dans le conteneur
+            cmd_copy_rules = ["docker", "cp", str(rules_path), f"{container_name}:/etc/suricata/rules/analysis.rules"]
+            subprocess.run(cmd_copy_rules, check=True)
+            
+            # Lancer l'analyse
+            if engine_name == "suricata":
+                cmd_analyze = [
+                    "docker", "exec", container_name,
+                    "suricata", "-c", "/etc/suricata/suricata.yaml",
+                    "-r", "/tmp/analysis.pcap",
+                    "-S", "/etc/suricata/rules/analysis.rules",
+                    "-l", "/var/log/suricata"
+                ]
+            else:  # snort
+                cmd_analyze = [
+                    "docker", "exec", container_name,
+                    "snort", "-c", "/etc/snort/snort.conf",
+                    "-r", "/tmp/analysis.pcap",
+                    "-l", "/var/log/snort"
+                ]
+            
+            subprocess.run(cmd_analyze, check=True)
+            
+            # Récupérer et parser les résultats
+            if engine_name == "suricata":
+                log_file = "/var/log/suricata/fast.log"
+            else:
+                log_file = "/var/log/snort/alert"
+                
+            cmd_results = ["docker", "exec", container_name, "cat", log_file]
+            result = subprocess.run(cmd_results, capture_output=True, text=True)
+            
+            # Parser les alertes
+            alerts = self._parse_ids_alerts(result.stdout, engine_name)
+            
+            return {"alerts": alerts}
+            
+        except Exception as e:
+            logger.error(f"Error during IDS analysis: {str(e)}")
+            raise
+
+    def _parse_ids_alerts(self, log_content: str, engine_type: str) -> list:
+        """Parse les alertes IDS depuis le contenu du log"""
+        alerts = []
+        
+        for line in log_content.splitlines():
+            if not line.strip():
+                continue
+                
+            try:
+                if engine_type == "suricata":
+                    # Format Suricata: timestamp [**] [rule] [classtype:type] [priority:n] msg [**] {proto} ip:port -> ip:port
+                    parts = line.split("[**]")
+                    if len(parts) < 2:
+                        continue
+                        
+                    timestamp = parts[0].strip()
+                    rule_parts = parts[1].strip().split("]")
+                    msg = rule_parts[-1].strip() if rule_parts else "Unknown"
+                    
+                    alerts.append({
+                        "timestamp": timestamp,
+                        "message": msg,
+                        "rule": rule_parts[0].strip("[") if rule_parts else "Unknown",
+                        "priority": rule_parts[2].strip("[priority:").strip("]") if len(rule_parts) > 2 else "Unknown"
+                    })
+                    
+                else:  # snort
+                    # Format Snort: [timestamp] [rule] [classtype:type] [priority:n] {proto} ip:port -> ip:port
+                    parts = line.split("[**]")
+                    if len(parts) < 2:
+                        continue
+                        
+                    alerts.append({
+                        "timestamp": parts[0].strip(),
+                        "message": parts[-1].strip(),
+                        "rule": "Snort Alert",
+                        "priority": "Unknown"
+                    })
+                    
+            except Exception as e:
+                logger.warning(f"Error parsing alert line: {str(e)}")
+                continue
+                
+        return alerts
 
 def show_pcap_generation():
     st.header("🔰 Générateur de PCAP")
@@ -269,7 +392,7 @@ def show_pcap_generation():
                 # Log des configurations
                 logger.debug(f"Attack type: {attack_type}")
                 logger.debug(f"Protocol config: {edited_config}")
-                logger.debug(f"Network config: {network_config}")
+                logger.debug(f"Network config: {options}")
                 logger.debug(f"Options: {options}")
                 
                 # Combiner toutes les configurations
@@ -391,6 +514,274 @@ def show_protocol_config():
             json.dump(edited_config, f, indent=2)
         st.success("Configuration sauvegardée!")
 
+def show_ids_testing():
+    st.header("🔍 Test de règle IDS")
+    
+    # Sélection du fichier PCAP
+    pcap_col, rules_col = st.columns(2)
+    
+    with pcap_col:
+        st.subheader("Sélection du PCAP")
+        pcap_source = st.radio(
+            "Source du fichier PCAP",
+            ["Fichier local", "Fichier généré"],
+            help="Choisir un fichier PCAP local ou un fichier précédemment généré"
+        )
+        
+        if pcap_source == "Fichier local":
+            uploaded_pcap = st.file_uploader(
+                "Charger un fichier PCAP",
+                type=["pcap", "pcapng"],
+                help="Glisser-déposer ou sélectionner un fichier PCAP"
+            )
+            pcap_path = uploaded_pcap.name if uploaded_pcap else None
+        else:
+            # Liste des PCAPs générés
+            pcap_dir = Path("/data/output/pcap")
+            pcap_files = list(pcap_dir.glob("*.pcap"))
+            if pcap_files:
+                pcap_path = st.selectbox(
+                    "Sélectionner un PCAP généré",
+                    pcap_files,
+                    format_func=lambda x: x.name
+                )
+            else:
+                st.warning("Aucun fichier PCAP généré trouvé")
+                pcap_path = None
+    
+    with rules_col:
+        st.subheader("Configuration des règles")
+        rule_source = st.radio(
+            "Source des règles",
+            ["Règles par défaut", "Règle personnalisée", "Fichier de règles"],
+            help="Choisir la source des règles IDS à tester"
+        )
+        
+        # Initialize variables
+        selected_rules = None
+        custom_rule = None
+        uploaded_rules = None
+        
+        if rule_source == "Règles par défaut":
+            # Sélection de l'IDS
+            ids_type = st.selectbox(
+                "Sélectionner l'IDS",
+                ["Suricata 6.0.15", "Suricata 7.0.2", "Snort 2.9", "Snort 3"]
+            )
+            # Liste des fichiers de règles disponibles
+            rules_dir = Path(f"config/{ids_type.lower().replace(' ', '')}/rules")
+            rule_files = list(rules_dir.glob("*.rules"))
+            selected_rules = st.multiselect(
+                "Sélectionner les fichiers de règles",
+                rule_files,
+                format_func=lambda x: x.name
+            )
+            
+        elif rule_source == "Règle personnalisée":
+            custom_rule = st.text_area(
+                "Entrer la règle IDS",
+                height=100,
+                help="Entrer une règle au format Suricata/Snort"
+            )
+            
+        else:  # Fichier de règles
+            uploaded_rules = st.file_uploader(
+                "Charger un fichier de règles",
+                type=["rules", "txt"],
+                help="Glisser-déposer ou sélectionner un fichier de règles"
+            )
+
+    # Sélection des sondes IDS à utiliser
+    st.subheader("Sélection des sondes IDS")
+    selected_engines = st.multiselect(
+        "Sélectionner les sondes IDS à utiliser",
+        ["Suricata 6.0.15", "Suricata 7.0.2", "Snort 2.9", "Snort 3"],
+        help="Choisir une ou plusieurs sondes IDS pour l'analyse"
+    )
+
+    # Bouton d'exécution
+    if st.button("🚀 Lancer l'analyse"):
+        if not pcap_path:
+            st.error("Veuillez sélectionner un fichier PCAP")
+            return
+            
+        if not selected_engines:
+            st.error("Veuillez sélectionner au moins une sonde IDS")
+            return
+            
+        # Vérifier qu'une source de règles est sélectionnée
+        if rule_source == "Règles par défaut" and not selected_rules:
+            st.error("Veuillez sélectionner au moins un fichier de règles")
+            return
+        elif rule_source == "Règle personnalisée" and not custom_rule:
+            st.error("Veuillez entrer une règle personnalisée")
+            return
+        elif rule_source == "Fichier de règles" and not uploaded_rules:
+            st.error("Veuillez sélectionner un fichier de règles")
+            return
+
+        # Conteneur pour stocker les erreurs
+        analysis_errors = {}
+        analysis_results = {}
+            
+        # Analyse avec chaque sonde sélectionnée
+        progress_text = "Analyse en cours..."
+        progress_bar = st.progress(0)
+        
+        for idx, engine in enumerate(selected_engines):
+            with st.spinner(f"Analyse avec {engine}..."):
+                try:
+                    results = spqr_web.analyze_pcap(
+                        pcap_path=pcap_path,
+                        engine=engine,
+                        rules=selected_rules if rule_source == "Règles par défaut" else custom_rule,
+                        custom_rules_file=uploaded_rules if rule_source == "Fichier de règles" else None
+                    )
+                    analysis_results[engine] = results
+                    
+                except Exception as e:
+                    logger.error(f"Error during analysis with {engine}: {str(e)}")
+                    analysis_errors[engine] = str(e)
+                
+                finally:
+                    # Mise à jour de la barre de progression
+                    progress = (idx + 1) / len(selected_engines)
+                    progress_bar.progress(progress)
+
+        # Affichage des résultats dans des onglets
+        if analysis_results or analysis_errors:
+            tabs = []
+            if analysis_results:
+                tabs.append("Résultats")
+            if analysis_errors:
+                tabs.append("Erreurs")
+            
+            current_tab = st.radio("", tabs)
+            
+            if current_tab == "Résultats":
+                st.subheader("📊 Résultats d'analyse")
+                for engine, results in analysis_results.items():
+                    with st.expander(f"Résultats - {engine}", expanded=True):
+                        if results.get("alerts"):
+                            df = pd.DataFrame(results["alerts"])
+                            st.dataframe(df)
+                            
+                            # Export CSV
+                            csv = df.to_csv(index=False)
+                            st.download_button(
+                                label="📥 Télécharger les résultats (CSV)",
+                                data=csv,
+                                file_name=f"alerts_{engine.lower().replace(' ', '_')}.csv",
+                                mime="text/csv"
+                            )
+                        else:
+                            st.info("Aucune alerte détectée")
+            
+            elif current_tab == "Erreurs":
+                st.subheader("❌ Erreurs d'analyse")
+                for engine, error in analysis_errors.items():
+                    with st.error(f"Erreur lors de l'analyse avec {engine}"):
+                        st.code(error)
+                        
+                # Export du rapport d'erreur
+                if analysis_errors:
+                    error_report = "\n\n".join([
+                        f"Engine: {engine}\nError: {error}"
+                        for engine, error in analysis_errors.items()
+                    ])
+                    st.download_button(
+                        label="📥 Télécharger le rapport d'erreurs",
+                        data=error_report,
+                        file_name="error_report.txt",
+                        mime="text/plain"
+                    )
+
+def show_home():
+    """Affiche la page d'accueil de SPQR"""
+    
+    # Logo et titre
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        try:
+            if Path("assets/spqr_logo.png").exists():
+                st.image("assets/spqr_logo.png", width=300)
+        except Exception as e:
+            logger.warning(f"Logo not found: {e}")
+            st.title("🛡️ SPQR")
+            
+        st.title("Security Package for Quick Response")
+        st.markdown("*Une suite d'outils pour la sécurité réseau*")
+
+    # Présentation des modules
+    st.markdown("## 📚 Modules disponibles")
+    
+    module_col1, module_col2 = st.columns(2)
+    
+    with module_col1:
+        st.markdown("""
+        ### 🔰 Générateur de PCAP
+        
+        Générez facilement du trafic réseau pour vos tests :
+        - Trafic HTTP, DNS, ICMP et QUIC
+        - Configuration personnalisée
+        - Export au format PCAP
+        """)
+        
+        if st.button("Lancer le générateur", use_container_width=True):
+            st.session_state.page = "Génération PCAP"
+            st.experimental_rerun()
+
+    with module_col2:
+        st.markdown("""
+        ### 🔍 Test de règles IDS
+        
+        Testez vos règles de détection :
+        - Support Suricata et Snort
+        - Règles personnalisées
+        - Analyse des alertes
+        """)
+        
+        if st.button("Tester des règles", use_container_width=True):
+            st.session_state.page = "Test de règle IDS"
+            st.experimental_rerun()
+
+    # Statistiques
+    st.markdown("## 📊 Statistiques")
+    stat_col1, stat_col2, stat_col3 = st.columns(3)
+
+    # Compter les PCAPs générés
+    pcap_count = len(list(Path("output/pcap").glob("*.pcap"))) if Path("output/pcap").exists() else 0
+    
+    # Compter les règles disponibles
+    rules_count = sum(1 for p in Path("config").rglob("*.rules") 
+                     for l in p.read_text().splitlines() 
+                     if l.strip() and not l.startswith('#'))
+    
+    # Compter les images Docker
+    docker_images = subprocess.run(
+        ["docker", "images", "spqr_*", "--format", "{{.Repository}}"],
+        capture_output=True, text=True
+    ).stdout.count('\n')
+
+    with stat_col1:
+        st.metric("PCAPs générés", pcap_count)
+    with stat_col2:
+        st.metric("Règles disponibles", rules_count)
+    with stat_col3:
+        st.metric("Images Docker", docker_images)
+
+    # Documentation rapide
+    with st.expander("ℹ️ Guide rapide", expanded=True):
+        st.markdown("""
+        ### Comment utiliser SPQR ?
+
+        1. **Générer du trafic** : Utilisez le générateur de PCAP pour créer des captures réseau
+        2. **Tester des règles** : Validez vos règles IDS avec les captures générées
+        3. **Analyser les résultats** : Consultez les alertes et affinez vos règles
+
+        Pour plus d'informations, consultez la documentation complète.
+        """)
+
 def main():
     st.set_page_config(
         page_title="SPQR - Security Package for Quick Response",
@@ -402,122 +793,28 @@ def main():
     global spqr_web
     spqr_web = SPQRWeb()
 
+    # Initialize session state for navigation
+    if 'page' not in st.session_state:
+        st.session_state.page = "Accueil"
+
     # Sidebar Navigation
     with st.sidebar:
         st.title("SPQR Navigation")
-        page = st.radio(
+        selected = st.radio(
             "Navigation",
-            ["Génération PCAP", "Test Rapide", "Configuration Protocoles"]
+            ["Accueil", "Génération PCAP", "Test de règle IDS", "Configuration Protocoles"]
         )
+        st.session_state.page = selected
 
     # Main Content based on selection
-    if page == "Génération PCAP":
+    if st.session_state.page == "Accueil":
+        show_home()
+    elif st.session_state.page == "Génération PCAP":
         show_pcap_generation()
-    elif page == "Test Rapide":
-        st.header("Test Rapide de Règles")
-        
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            # Attack Type Selection
-            attack_type = st.selectbox(
-                "Type d'attaque",
-                spqr_web.spqr.list_attack_types()
-            )
-        with col2:
-            # Engine Selection
-            selected_engines = st.multiselect(
-                "Sélectionner les IDS",
-                options=[f"{e['type']}-{e['version']}" for e in spqr_web.get_available_engines()],
-                default=[f"{e['type']}-{e['version']}" for e in spqr_web.get_available_engines()]
-            )
-        
-        if st.button("🚀 Lancer le Test Rapide"):
-            with st.spinner("Génération et analyse en cours..."):
-                try:
-                    # Generate PCAP first
-                    pcap_result = spqr_web.spqr.generate_pcap(attack_type)
-                    if not pcap_result or 'error' in pcap_result:
-                        st.error(f"Erreur lors de la génération du PCAP: {pcap_result.get('error', 'Unknown error')}")
-                        return
-
-                    # Show PCAP info
-                    pcap_file = pcap_result['pcap_file']
-                    st.success(f"PCAP généré: {Path(pcap_file).name}")
-
-                    # Test with each selected engine
-                    results = {}
-                    for engine_id in selected_engines:
-                        engine_type, version = engine_id.split('-')
-                        with st.spinner(f"Test avec {engine_type} {version}..."):
-                            result = spqr_web.spqr.test_with_engine(
-                                pcap_file, 
-                                engine_type=engine_type, 
-                                version=version
-                            )
-                            results[engine_id] = result
-
-                    # Display results in tabs
-                    if results:
-                        tabs = st.tabs(list(results.keys()))
-                        for tab, (engine_id, result) in zip(tabs, results.items()):
-                            with tab:
-                                if 'error' in result:
-                                    st.error(f"Erreur: {result['error']}")
-                                else:
-                                    if result.get('log_file') and os.path.exists(result['log_file']):
-                                        with open(result['log_file']) as f:
-                                            st.code(f.read())
-                                    if result.get('alert_count'):
-                                        st.metric("Alertes détectées", result['alert_count'])
-
-                    st.session_state['last_results'] = results
-
-                except Exception as e:
-                    st.error(f"Erreur: {str(e)}")
-                    logger.exception("Erreur lors du test rapide")
-
-    elif page == "Test Manuel":
-        st.header("Test Manuel avec Fichiers")
-        pcap_file = st.file_uploader("Sélectionner un fichier PCAP", type=['pcap', 'pcapng'])
-        rules_file = st.file_uploader("Sélectionner un fichier de règles (optionnel)", type=['rules'])
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("Tester les Règles"):
-                if pcap_file:
-                    # Implement manual test logic
-                    st.info("Test manuel en cours...")
-        with col2:
-            if st.button("Générer Rapport"):
-                st.info("Génération du rapport...")
-
-    elif page == "Configuration Protocoles":
+    elif st.session_state.page == "Test de règle IDS":
+        show_ids_testing()
+    elif st.session_state.page == "Configuration Protocoles":
         show_protocol_config()
-
-    else:  # Logs
-        st.header("Logs d'Exécution")
-        
-        # Display logs
-        if 'logs' not in st.session_state:
-            st.session_state.logs = []
-        
-        log_viewer = st.empty()
-        log_viewer.code('\n'.join(st.session_state.logs))
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("Effacer Logs"):
-                st.session_state.logs = []
-                log_viewer.code('')
-        with col2:
-            if st.button("Sauvegarder Logs"):
-                # Save logs logic
-                st.download_button(
-                    "📥 Télécharger les logs",
-                    '\n'.join(st.session_state.logs),
-                    "spqr_logs.txt",
-                    "text/plain"
-                )
 
 if __name__ == "__main__":
     main()

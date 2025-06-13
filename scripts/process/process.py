@@ -17,6 +17,15 @@ Ce fichier a été créé dans le but de réaliser les tâches dédiées aux pro
 '''
 
 class SPQRSimple:
+    """
+    Main class for SPQR functionality handling traffic generation and IDS analysis.
+    
+    This class provides methods for:
+    - Generating network traffic in PCAP format
+    - Testing traffic against IDS rules
+    - Analyzing results and generating reports
+    """
+
     def __init__(self, config_file="config/config.json"):
         with open(config_file, "r") as f:
             self.config = json.load(f)
@@ -39,7 +48,14 @@ class SPQRSimple:
         pcap_path = os.path.join(self.config["output"]["pcap_dir"], pcap_filename)
 
         try:
-            generate_pcap(attack_type, pcap_path, self.config)
+            result = self.generate_pcap(attack_type, self.config)
+            if "error" in result:
+                return {"error": result["error"]}
+            # Move or copy the generated PCAP to the desired path if needed
+            generated_pcap = result.get("pcap_file")
+            if generated_pcap and generated_pcap != pcap_path:
+                import shutil
+                shutil.copy(generated_pcap, pcap_path)
         except Exception as e:
             return {"error": str(e)}
 
@@ -340,6 +356,171 @@ class SPQRSimple:
         except Exception as e:
             logger.error(f"Error generating PCAP: {str(e)}")
             return {"error": str(e)}
+
+    def analyze_pcap(self, pcap_path: str, engine: str, rules: str = None, custom_rules_file: str = None) -> dict:
+        """
+        Analyze a PCAP file using specified IDS engine.
+
+        Args:
+            pcap_path (str): Path to the PCAP file to analyze
+            engine (str): IDS engine to use (format: "name version", e.g., "suricata 6.0.15")
+            rules (str, optional): Custom rules content as string
+            custom_rules_file (str, optional): Path to custom rules file
+
+        Returns:
+            dict: Analysis results containing alerts or errors
+                Format: {
+                    "alerts": List[dict],  # List of alerts found
+                    "warning": str         # Optional warning message
+                }
+
+        Raises:
+            RuntimeError: If analysis fails
+            FileNotFoundError: If required files are missing
+        """
+        try:
+            # Extract engine name and version
+            engine_name, version = engine.lower().split()
+            image_name = f"spqr_{engine_name}{version.replace('.', '')}"
+
+            # Create temporary directories
+            temp_dir = Path(f"/tmp/spqr_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            log_dir = temp_dir / "logs"
+            log_dir.mkdir()
+
+            try:
+                # Prepare rules file
+                rules_path = temp_dir / "custom.rules"
+                if custom_rules_file:
+                    rules_path.write_bytes(custom_rules_file.getvalue())
+                elif rules and isinstance(rules, str):
+                    rules_path.write_text(rules)
+                else:
+                    default_rules = Path(f"config/{engine_name}_{version}/rules/suricata.rules")
+                    if default_rules.exists():
+                        rules_path.write_text(default_rules.read_text())
+                    else:
+                        raise FileNotFoundError(f"No rules found at {default_rules}")
+
+                # Run analysis with docker run
+                cmd = [
+                    "docker", "run", "--rm",  # Remove container after execution
+                    "-v", f"{pcap_path.absolute()}:/input.pcap:ro",
+                    "-v", f"{rules_path.absolute()}:/rules/custom.rules:ro",
+                    "-v", f"{log_dir.absolute()}:/var/log/{engine_name}",
+                    image_name
+                ]
+
+                if engine_name == "suricata":
+                    cmd.extend([
+                        "suricata",
+                        "-c", "/etc/suricata/suricata.yaml",
+                        "-S", "/rules/custom.rules",
+                        "-r", "/input.pcap",
+                        "-l", f"/var/log/{engine_name}"
+                    ])
+                else:  # snort
+                    cmd.extend([
+                        "snort",
+                        "-c", "/etc/snort/snort.conf",
+                        "-r", "/input.pcap",
+                        "-l", f"/var/log/{engine_name}"
+                    ])
+
+                # Execute analysis
+                logger.debug(f"Running command: {' '.join(cmd)}")
+                result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+
+                # Parse results
+                log_file = log_dir / ("fast.log" if engine_name == "suricata" else "alert")
+                if not log_file.exists():
+                    return {"alerts": [], "warning": "No alerts generated"}
+
+                alerts = self._parse_ids_alerts(log_file.read_text(), engine_name)
+                return {"alerts": alerts}
+
+            finally:
+                # Cleanup temporary files
+                import shutil
+                if temp_dir.exists():
+                    shutil.rmtree(temp_dir)
+
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Command failed: {e.stdout}\n{e.stderr}")
+            raise RuntimeError(f"Analysis failed for {engine}: {e.stderr}")
+        except Exception as e:
+            logger.error(f"Error during analysis: {str(e)}")
+            raise
+
+    def _prepare_rules_file(self, rules_dir: Path, rules: str, custom_rules_file: str, engine_name: str, version: str) -> Path:
+        """
+        Prepare rules file for IDS analysis.
+
+        Args:
+            rules_dir (Path): Directory to store rules
+            rules (str): Custom rules content
+            custom_rules_file (str): Path to custom rules file
+            engine_name (str): Name of IDS engine
+            version (str): Version of IDS engine
+
+        Returns:
+            Path: Path to prepared rules file
+        """
+        if custom_rules_file:
+            rules_path = rules_dir / "custom.rules"
+            rules_path.write_bytes(custom_rules_file.getvalue())
+        elif rules and isinstance(rules, str):
+            rules_path = rules_dir / "custom.rules"
+            rules_path.write_text(rules)
+        else:
+            rules_path = Path(f"config/{engine_name}_{version}/rules/suricata.rules")
+        return rules_path
+
+    def _prepare_docker_command(self, engine_name: str, image_name: str, pcap_path: str, rules_path: Path, log_dir: Path) -> list:
+        """
+        Prepare Docker command for IDS analysis.
+
+        Args:
+            engine_name (str): Name of IDS engine
+            image_name (str): Docker image name
+            pcap_path (str): Path to PCAP file
+            rules_path (Path): Path to rules file
+            log_dir (Path): Directory for logs
+
+        Returns:
+            list: Docker command as list of strings
+        """
+        if engine_name == "suricata":
+            return [
+                "docker", "run", "--rm",
+                "-v", f"{pcap_path}:/input.pcap:ro",
+                "-v", f"{rules_path}:/etc/suricata/rules/custom.rules:ro",
+                "-v", f"{log_dir}:/var/log/suricata",
+                image_name,
+                "suricata",
+                "-c", "/etc/suricata/suricata.yaml",
+                "-S", "/etc/suricata/rules/custom.rules",
+                "-r", "/input.pcap",
+                "-l", "/var/log/suricata"
+            ]
+        else:  # snort
+            return [
+                "docker", "run", "--rm",
+                "-v", f"{pcap_path}:/input.pcap:ro",
+                "-v", f"{rules_path}:/etc/snort/rules/custom.rules:ro",
+                "-v", f"{log_dir}:/var/log/snort",
+                image_name,
+                "snort",
+                "-c", "/etc/snort/snort.conf",
+                "-r", "/input.pcap",
+                "-l", "/var/log/snort"
+            ]
+
+    def _parse_engine_results(self, engine_name: str, log_dir: Path) -> list:
+        """Parse results from engine output"""
+        log_file = log_dir / ("fast.log" if engine_name == "suricata" else "alert")
+        return self._parse_ids_alerts(log_file.read_text(), engine_name)
 
 class SuricataExecution:
     def __init__(self):
