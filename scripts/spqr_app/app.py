@@ -904,8 +904,16 @@ def verify_ids_config(engine: str) -> bool:
     """Verify and setup IDS configuration files"""
     try:
         engine_name = engine.lower().replace(" ", "_")
-        config_dir = Path(f"config/{engine_name}")
-        system_config_dir = Path(f"/etc/{engine_name.split('_')[0]}")
+        # Utiliser des chemins relatifs basés sur la racine du projet
+        base_dir = Path(".")
+        
+        # Structure des dossiers
+        dirs = {
+            "config": base_dir / "config" / engine_name,
+            "logs": base_dir / "output/logs" / engine_name,
+            "run": base_dir / "output/run",
+            "rules": base_dir / "config" / engine_name / "rules",
+        }
         
         # Create system config directory if it doesn't exist
         system_config_dir.mkdir(parents=True, exist_ok=True)
