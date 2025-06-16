@@ -58,7 +58,37 @@ class SPQRWeb:
 
     def analyze_pcap(self, pcap_path: str, engine: str, rules: str = None, custom_rules_file: str = None) -> dict:
         """Wrapper pour l'analyse PCAP, délègue à SPQRSimple"""
-        return self.spqr.analyze_pcap(pcap_path, engine, rules, custom_rules_file)
+        try:
+            logger.debug(f"Starting analysis with engine: {engine}")
+            logger.debug(f"PCAP path: {pcap_path}")
+            logger.debug(f"Rules type: {'custom' if rules else 'file' if custom_rules_file else 'default'}")
+        
+            # Vérifier si le fichier PCAP existe
+            if not Path(pcap_path).exists():
+                raise FileNotFoundError(f"PCAP file not found: {pcap_path}")
+            
+            # Vérifier le contenu des règles
+            if rules:
+                logger.debug(f"Custom rules content: {rules[:100]}...")
+            elif custom_rules_file:
+                logger.debug(f"Rules file name: {custom_rules_file.name}")
+            
+            # Lancer l'analyse
+            results = self.spqr.analyze_pcap(pcap_path, engine, rules, custom_rules_file)
+        
+            # Vérifier les résultats
+            if not results:
+                logger.warning(f"No results returned for {engine}")
+                return {"alerts": []}
+            
+            logger.debug(f"Analysis results for {engine}: {results}")
+            return results
+        
+        except Exception as e:
+            logger.exception(f"Error in analyze_pcap for {engine}")
+            raise
+    
+       #return self.spqr.analyze_pcap(pcap_path, engine, rules, custom_rules_file)
 
     def _parse_ids_alerts(self, log_content: str, engine_type: str) -> list:
         """Parse les alertes IDS depuis le contenu du log"""
@@ -590,31 +620,71 @@ def show_ids_testing():
             
             try:
                 engine_rule = engine_rules.get(engine, {})
+                 
+                # Verify and setup IDS configuration
+                if not verify_ids_config(engine):
+                    raise RuntimeError(f"Failed to setup {engine} configuration")
+                
+                # Vérification détaillée pour tous les IDS
+                engine_name = engine.lower().replace(" ", "_")
+                
+                # Structure des chemins
+                config_dir = Path(f"config/{engine_name}")
+                log_dir = Path(f"output/logs/{engine_name}")
+                rules_dir = config_dir / "rules"
+                
+                # Log des informations de débogage
+                logger.debug(f"=== Débogue IDS: {engine} ===")
+                logger.debug(f"Config directory: {config_dir}")
+                logger.debug(f"Rules directory: {rules_dir}")
+                logger.debug(f"Log directory: {log_dir}")
+                
+                # Vérification des fichiers de configuration
+                if config_dir.exists():
+                    logger.debug(f"Config files: {list(config_dir.glob('**/*'))}")
+                else:
+                    logger.warning(f"Config directory not found for {engine}")
+                
+                # Vérification des règles
+                if rules_dir.exists():
+                    logger.debug(f"Rules files: {list(rules_dir.glob('*.rules'))}")
+                else:
+                    logger.warning(f"Rules directory not found for {engine}")
+                
+                # Vérification des logs existants
+                if log_dir.exists():
+                    logger.debug(f"Existing log files: {list(log_dir.glob('*'))}")
+                
+                # Vérification des règles sélectionnées
                 if engine_rule["type"] == "default":
-                    results = spqr_web.analyze_pcap(
-                        pcap_path=str(pcap_path),
-                        engine=engine,
-                        rules=None,
-                        custom_rules_file=None
-                    )
+                    logger.debug(f"Selected default rules: {engine_rule['rules']}")
                 elif engine_rule["type"] == "custom":
-                    results = spqr_web.analyze_pcap(
-                        pcap_path=str(pcap_path),
-                        engine=engine,
-                        rules=engine_rule["rules"],
-                        custom_rules_file=None
-                    )
+                    logger.debug(f"Custom rule content: {engine_rule['rules'][:100]}...")
                 else:  # file
-                    results = spqr_web.analyze_pcap(
-                        pcap_path=str(pcap_path),
-                        engine=engine,
-                        rules=None,
-                        custom_rules_file=engine_rule["rules"]
-                    )
+                    logger.debug(f"Uploaded rules file: {engine_rule['rules'].name if engine_rule['rules'] else None}")
+
+                # Lancer l'analyse avec les paramètres vérifiés
+                results = spqr_web.analyze_pcap(
+                    pcap_path=str(pcap_path),
+                    engine=engine,
+                    rules=engine_rule["rules"] if engine_rule["type"] == "custom" else None,
+                    custom_rules_file=engine_rule["rules"] if engine_rule["type"] == "file" else None
+                )
+                
+                # Vérification des résultats
+                if results:
+                    logger.debug(f"Analysis results: {results}")
+                    if log_dir.exists():
+                        logger.debug(f"Generated log files: {list(log_dir.glob('*'))}")
+                else:
+                    logger.warning(f"No results returned for {engine}")
+                
                 analysis_results[engine] = results
                 analysis_stats["success"] += 1
                 status_indicators[engine].success("✅ Analyse terminée")
+
             except Exception as e:
+                logger.exception(f"Error in {engine} analysis")
                 error_details = {
                     "message": str(e),
                     "type": type(e).__name__,
@@ -622,15 +692,16 @@ def show_ids_testing():
                     "context": {
                         "pcap": str(pcap_path),
                         "rules_source": engine_rule["type"],
-                        "selected_rules": str(engine_rule.get("rules"))
+                        "selected_rules": str(engine_rule.get("rules")),
+                        "config_dir_exists": config_dir.exists(),
+                        "rules_dir_exists": rules_dir.exists(),
+                        "log_dir_exists": log_dir.exists()
                     }
                 }
                 analysis_errors[engine] = error_details
                 analysis_stats["failed"] += 1
                 logger.error(f"Error analyzing with {engine}: {str(e)}")
                 status_indicators[engine].error("❌ Erreur")
-            finally:
-                progress_bar.progress((idx + 1) / len(selected_engines))
 
         # Afficher les résultats après l'analyse
         if analysis_results or analysis_errors:
@@ -645,6 +716,17 @@ def show_ids_testing():
                 st.metric("Succès", analysis_stats["success"])
             with metric_cols[2]:
                 st.metric("Échecs", analysis_stats["failed"])
+
+            if st.button("🔍 Afficher les logs système", key="show_sys_logs"):
+                st.markdown("### 📝 Logs système")
+                for engine in selected_engines:
+                    with st.expander(f"Logs pour {engine}"):
+                        engine_name = engine.lower().replace(" ", "_")
+                        log_dir = Path(f"output/logs/{engine_name}")
+                        if log_dir.exists():
+                            for log_file in log_dir.glob("*"):
+                                st.markdown(f"**{log_file.name}**")
+                                st.code(log_file.read_text(), language="text")
 
             # Onglets pour les succès et les échecs
             success_tab, error_tab = st.tabs(["✅ Analyses réussies", "❌ Analyses échouées"])
@@ -818,6 +900,41 @@ def main():
     elif st.session_state.page == "Test de règle IDS":
         show_ids_testing()
 
+def verify_ids_config(engine: str) -> bool:
+    """Verify and setup IDS configuration files"""
+    try:
+        engine_name = engine.lower().replace(" ", "_")
+        config_dir = Path(f"config/{engine_name}")
+        system_config_dir = Path(f"/etc/{engine_name.split('_')[0]}")
+        
+        # Create system config directory if it doesn't exist
+        system_config_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Copy configuration files
+        if config_dir.exists():
+            for config_file in config_dir.glob("*.y*ml"):
+                dest_path = system_config_dir / config_file.name
+                if not dest_path.exists():
+                    dest_path.write_bytes(config_file.read_bytes())
+                    logger.debug(f"Copied {config_file} to {dest_path}")
+            
+            # Create rules directory
+            rules_dir = system_config_dir / "rules"
+            rules_dir.mkdir(exist_ok=True)
+            
+            # Copy rules files
+            for rule_file in (config_dir / "rules").glob("*.rules"):
+                dest_path = rules_dir / rule_file.name
+                if not dest_path.exists():
+                    dest_path.write_bytes(rule_file.read_bytes())
+                    logger.debug(f"Copied {rule_file} to {dest_path}")
+                    
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error setting up {engine} config: {str(e)}")
+        return False
+    
 if __name__ == "__main__":
     main()
 
