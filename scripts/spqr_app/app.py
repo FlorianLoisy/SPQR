@@ -5,6 +5,9 @@ import zipfile
 import json
 import logging
 import subprocess
+import requests
+import tarfile
+import io
 from pathlib import Path
 from scripts.process.process import SPQRSimple
 from datetime import datetime
@@ -914,35 +917,98 @@ def verify_ids_config(engine: str) -> bool:
             "run": base_dir / "output/run",
             "rules": base_dir / "config" / engine_name / "rules",
         }
-        
-        # Create system config directory if it doesn't exist
+        # Determine if it's Suricata or Snort
+        is_suricata = "suricata" in engine_name.lower()
+        system_config_dir = Path("/etc/suricata" if is_suricata else "/etc/snort")
+              
+        # Create all directories
+        for dir_path in dirs.values():
+            dir_path.mkdir(parents=True, exist_ok=True)
+            logger.debug(f"Created/verified directory: {dir_path}")
+
+        # Vérifier si les règles ET sont présentes
+        rules_dir = dirs["rules"]
+        if not list(rules_dir.glob("*.rules")):
+            logger.info(f"No rules found in {rules_dir}, downloading ET rules...")
+            if not download_et_rules(engine):
+                raise RuntimeError("Failed to download ET rules")
+            
+        # Create system directories if needed
         system_config_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Copy configuration files
-        if config_dir.exists():
-            for config_file in config_dir.glob("*.y*ml"):
-                dest_path = system_config_dir / config_file.name
-                if not dest_path.exists():
-                    dest_path.write_bytes(config_file.read_bytes())
-                    logger.debug(f"Copied {config_file} to {dest_path}")
+                
+        if dirs["config"].exists():
+            # Copy YAML config to system location for Suricata
+            if is_suricata:
+                yaml_files = list(dirs["config"].glob("*.y*ml"))
+                if yaml_files:
+                    yaml_file = yaml_files[0]
+                    system_yaml = system_config_dir / "suricata.yaml"
+                    system_yaml.write_bytes(yaml_file.read_bytes())
+                    logger.debug(f"Copied {yaml_file} to {system_yaml}")
             
-            # Create rules directory
-            rules_dir = system_config_dir / "rules"
-            rules_dir.mkdir(exist_ok=True)
+            # Create and populate rules directory
+            system_rules_dir = system_config_dir / "rules"
+            system_rules_dir.mkdir(exist_ok=True)
             
-            # Copy rules files
-            for rule_file in (config_dir / "rules").glob("*.rules"):
-                dest_path = rules_dir / rule_file.name
-                if not dest_path.exists():
-                    dest_path.write_bytes(rule_file.read_bytes())
-                    logger.debug(f"Copied {rule_file} to {dest_path}")
-                    
+            if dirs["rules"].exists():
+                for rule_file in dirs["rules"].glob("*.rules"):
+                    system_rule_path = system_rules_dir / rule_file.name
+                    system_rule_path.write_bytes(rule_file.read_bytes())
+                    logger.debug(f"Copied {rule_file} to {system_rule_path}")
+            
+            # Create run directory if needed
+            run_dir = Path("/var/run/suricata" if is_suricata else "/var/run/snort")
+            run_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Set proper permissions
+            os.system(f"chmod -R 755 {system_config_dir}")
+            os.system(f"chmod -R 755 {run_dir}")
+            
         return True
         
     except Exception as e:
         logger.error(f"Error setting up {engine} config: {str(e)}")
         return False
-    
+
+def download_et_rules(engine: str) -> bool:
+    """Télécharge et installe les règles Emerging Threats Open"""
+    try:
+        engine_name = engine.lower().replace(" ", "_")
+        rules_dir = Path(f"config/{engine_name}/rules")
+        rules_dir.mkdir(parents=True, exist_ok=True)
+
+        # URL des règles ET Open
+        et_url = "https://rules.emergingthreats.net/open/suricata-6.0/emerging.rules.tar.gz"
+        if "snort" in engine_name:
+            et_url = "https://rules.emergingthreats.net/open/snort-2.9.0/emerging.rules.tar.gz"
+
+        # Télécharger et extraire les règles
+        import requests
+        import tarfile
+        import io
+
+        logger.info(f"Downloading ET rules for {engine}")
+        response = requests.get(et_url)
+        
+        if response.status_code == 200:
+            # Extraire les règles
+            with tarfile.open(fileobj=io.BytesIO(response.content), mode='r:gz') as tar:
+                # Filtrer et extraire seulement les fichiers .rules
+                rules_files = [f for f in tar.getmembers() if f.name.endswith('.rules')]
+                for rule_file in rules_files:
+                    rule_file.name = Path(rule_file.name).name
+                    tar.extract(rule_file, path=rules_dir)
+            
+            logger.info(f"Successfully installed ET rules in {rules_dir}")
+            return True
+        else:
+            logger.error(f"Failed to download ET rules: {response.status_code}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error downloading ET rules: {str(e)}")
+        return False
+        
 if __name__ == "__main__":
     main()
 
