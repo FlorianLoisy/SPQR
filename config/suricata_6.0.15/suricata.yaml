@@ -48,7 +48,7 @@ vars:
 ##
 
 #default-log-dir: /var/log/suricata/
-default-log-dir: /home/TraitementRules/Result/
+default-log-dir: ../..output/logs/suricata_6.0.15/
 
 stats:
   enabled: yes
@@ -520,9 +520,9 @@ outputs:
   # https://suricata.readthedocs.io/en/latest/output/lua-output.html
   - lua:
       enabled: no
-      scripts-dir: /home/florian.loisy/IN_SAR/01_Dossiers_Analystes/B_LSY/TraitementRules/lua
-      scripts:
-         - 20210127_DR_CALID_MuddyWater_Quicksand.lua
+      scripts-dir: ../../scripts/lua
+
+
 
 
 logging:
@@ -1079,7 +1079,7 @@ host-mode: auto
 # the file name of the socket.
 unix-command:
   enabled: yes
-  filename: /var/run/suricata-command.socket
+  filename: ../../output/run/suricata-command.socket
 
 # Magic file. The extension .mgc is added to the value here.
 #magic-file: /usr/share/file/magic
@@ -1872,7 +1872,7 @@ napatech:
 ## file configuration".
 ##
 
-#default-rule-path: /etc/suricata/rules
+default-rule-path: ../../rules/
 #rule-files:
 # - suricata.rules
 
@@ -1883,8 +1883,6 @@ napatech:
 ## is setup for suricata-update as it was most likely bundled and
 ## installed with Suricata.
 ##
-
-default-rule-path: /home/florian/TraitementRules/lua/
 
 #rule-files:
 # - myrules.rules
