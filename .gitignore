@@ -34,3 +34,9 @@ output/
 # Ignorer les fichiers PCAP dans le dossier output, sauf .gitkeep
 output/pcap/*
 !output/pcap/.gitkeep
+
+# Ignore output directories but keep their structure
+output/logs/*
+output/run/*
+!output/logs/.gitkeep
+!output/run/.gitkeep
