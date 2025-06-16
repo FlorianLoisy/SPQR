@@ -632,6 +632,78 @@ def show_ids_testing():
             finally:
                 progress_bar.progress((idx + 1) / len(selected_engines))
 
+        # Afficher les résultats après l'analyse
+        if analysis_results or analysis_errors:
+            st.markdown("---")
+            st.subheader("📊 Résultats de l'analyse")
+            
+            # Métriques globales
+            metric_cols = st.columns(3)
+            with metric_cols[0]:
+                st.metric("Total des analyses", analysis_stats["total"])
+            with metric_cols[1]:
+                st.metric("Succès", analysis_stats["success"])
+            with metric_cols[2]:
+                st.metric("Échecs", analysis_stats["failed"])
+
+            # Onglets pour les succès et les échecs
+            success_tab, error_tab = st.tabs(["✅ Analyses réussies", "❌ Analyses échouées"])
+
+            with success_tab:
+                if analysis_results:
+                    for engine, results in analysis_results.items():
+                        with st.expander(f"Résultats pour {engine}", expanded=False):
+                            if results.get("alerts"):
+                                # Convertir les alertes en DataFrame pour un meilleur affichage
+                                df = pd.DataFrame(results["alerts"])
+                                st.dataframe(df)
+                                
+                                # Bouton pour télécharger les logs
+                                log_content = "\n".join([str(alert) for alert in results["alerts"]])
+                                st.download_button(
+                                    "📥 Télécharger les logs",
+                                    log_content,
+                                    file_name=f"analysis_logs_{engine.lower().replace(' ', '_')}.txt",
+                                    mime="text/plain"
+                                )
+                            else:
+                                st.info("Aucune alerte détectée")
+                else:
+                    st.info("Aucune analyse réussie")
+
+            with error_tab:
+                if analysis_errors:
+                    for engine, error in analysis_errors.items():
+                        with st.expander(f"Erreur pour {engine}", expanded=False):
+                            # Afficher les détails de l'erreur
+                            st.error(f"Message: {error['message']}")
+                            st.text(f"Type: {error['type']}")
+                            st.text(f"Timestamp: {error['timestamp']}")
+                            
+                            # Afficher le contexte directement
+                            st.markdown("##### Détails du contexte")
+                            st.json(error['context'])
+                            
+                            # Ajouter le bouton pour voir les logs bruts
+                            show_logs = st.button(
+                                "👁️ Voir les logs bruts",
+                                key=f"show_logs_{engine}"
+                            )
+                            
+                            if show_logs:
+                                st.code(error['message'], language="text")
+                            
+                            # Bouton pour télécharger les logs d'erreur
+                            error_content = json.dumps(error, indent=2)
+                            st.download_button(
+                                "📥 Télécharger les logs d'erreur",
+                                error_content,
+                                file_name=f"error_logs_{engine.lower().replace(' ', '_')}.json",
+                                mime="application/json"
+                            )
+                else:
+                    st.info("Aucune erreur d'analyse")
+                    
 def show_home():
     """Affiche la page d'accueil de SPQR"""
     
