@@ -3,15 +3,13 @@ import json
 import shutil
 import subprocess
 import logging
-#from scripts.utils.common import abs_path
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
 from scapy.all import wrpcap
 import pandas as pd
-
+from scripts.utils.common import abs_path
 from scripts.generate_traffic import ProtocolGeneratorFactory
-from scripts.spqr_app.app import abs_path
 
 logger = logging.getLogger("SPQR")
 
@@ -420,3 +418,4 @@ def ensure_docker_images(self) -> bool:
     except subprocess.CalledProcessError as e:
         logger.error(f"Erreur construction images Docker: {e.stderr.decode()}")
         return False
+    

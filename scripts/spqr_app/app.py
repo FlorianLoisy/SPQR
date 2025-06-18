@@ -1,17 +1,11 @@
 import streamlit as st
 import pandas as pd
-import os
-import zipfile
 import json
 import logging
 import subprocess
 import requests
-import tarfile
-import io
-from pathlib import Path
-#from scripts.utils.common import abs_path, load_json_or_yaml
+from scripts.utils.common import abs_path, load_json_or_yaml
 from scripts.process.process import SPQRSimple
-from datetime import datetime
 from typing import Dict, List, Any, Optional
 from scripts.utils.file_watcher import FileWatcher
 import yaml  # Ajout de l'import yaml
@@ -21,21 +15,6 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # === UTILITAIRES FACTORISÉS ===
-
-def abs_path(path: Union[str, Path]) -> Path:
-    """Retourne un chemin absolu résolu."""
-    return Path(path).expanduser().resolve()
-
-def load_json_or_yaml(config_path: Path) -> dict:
-    """Charge indifféremment du JSON ou du YAML selon l'extension."""
-    if not config_path.exists():
-        raise FileNotFoundError(f"Config file not found: {config_path}")
-    if config_path.suffix in ('.yaml', '.yml'):
-        with open(config_path, 'r') as f:
-            return yaml.safe_load(f)
-    else:
-        with open(config_path, 'r') as f:
-            return json.load(f)
 
 def display_config_block(d: dict, key_prefix: str = "", help_map: dict = None) -> dict:
     """Affiche dynamiquement les entrées d'un dict dans Streamlit, retourne les valeurs éditées."""
@@ -456,3 +435,6 @@ def get_engine_paths(engine: str) -> dict:
         "rules": base_dir / "rules" / f"{engine_type}.rules",
         "output": abs_path("output") / engine_type / version
     }
+
+if __name__ == "__main__":
+    main()
