@@ -3,7 +3,7 @@ import json
 import shutil
 import subprocess
 import logging
-from scripts.utils.common import abs_path
+#from scripts.utils.common import abs_path
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
