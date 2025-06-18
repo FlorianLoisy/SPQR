@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 # === UTILITAIRES FACTORISÉS ===
 
-def abs_path(path: str | Path) -> Path:
+def abs_path(path: Union[str, Path]) -> Path:
     """Retourne un chemin absolu résolu."""
     return Path(path).expanduser().resolve()
 
@@ -344,6 +344,12 @@ def main():
     )
     global spqr_web
     spqr_web = SPQRWeb()
+    
+    # Vérifier/construire les images Docker
+    if not spqr_web.spqr.ensure_docker_images():
+        st.error("❌ Erreur lors de la construction des images Docker")
+        st.stop()
+        
     if 'page' not in st.session_state:
         st.session_state.page = "Accueil"
     with st.sidebar:
