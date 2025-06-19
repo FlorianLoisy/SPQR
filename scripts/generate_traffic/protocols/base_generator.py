@@ -5,7 +5,19 @@ from scapy.packet import Packet
 class ProtocolGenerator(ABC):
     """Classe de base abstraite pour tous les générateurs de protocoles"""
     
-    def __init__(self):
+    def __init__(self, config: dict):
+        """Initialize protocol generator with configuration"""
+        # Vérification et extraction des paramètres requis
+        required_keys = ['source_ip', 'dest_ip', 'source_port', 'dest_port']
+        for key in required_keys:
+            if key not in config:
+                raise ValueError(f"Missing required configuration parameter: {key}")
+    
+        self.source_ip = config.get('source_ip')
+        self.dest_ip = config.get('dest_ip')
+        self.source_port = config.get('source_port')
+        self.dest_port = config.get('dest_port')
+        self.config = config  # Store full config for additional parameters
         self.packet_count = 1
         self.time_interval = 0
     

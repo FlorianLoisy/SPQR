@@ -4,7 +4,7 @@ import json
 import logging
 import subprocess
 import requests
-from scripts.utils.common import abs_path, load_json_or_yaml
+from scripts.utils.utils import abs_path, load_json_or_yaml
 from scripts.process.process import SPQRSimple
 from typing import Dict, List, Any, Optional
 from scripts.utils.file_watcher import FileWatcher
@@ -145,7 +145,19 @@ def show_pcap_generation():
 
     # Bloc configuration réseau
     st.subheader("Paramètres réseau")
-    network_config = display_config_block(spqr_web.config["network"], key_prefix="network_")
+    default_network = {
+        "source_ip": "192.168.1.10",
+        "dest_ip": "192.168.1.20",
+        "source_port": 12345,
+        "dest_port": 80
+    }
+    # Supprimer le préfixe 'network_' de la configuration
+    network_config = {}
+    temp_config = display_config_block(spqr_web.config.get("network", default_network), key_prefix="network_")
+    for key, value in temp_config.items():
+        # Enlever le préfixe 'network_'
+        clean_key = key.replace('network_', '')
+        network_config[clean_key] = value
 
     # Bloc options de génération
     st.subheader("Options")
@@ -168,13 +180,16 @@ def show_pcap_generation():
     if st.button("🚀 Générer PCAP"):
         with st.spinner("Génération du fichier PCAP en cours..."):
             try:
+                # Fusionner toutes les configurations dans un seul dictionnaire
                 generation_config = {
-                    "network": network_config,
-                    "protocol": edited_config,
-                    "options": options
+                    **network_config,  # Configuration réseau de base
+                    **edited_config,   # Configuration du protocole
+                    **options         # Options de génération
                 }
-                result = spqr.generate_pcap(
-                    attack_type,
+
+                result = spqr_web.spqr.generate_pcap(
+                    protocol_type=protocol_type,
+                    attack_type=attack_type,
                     config=generation_config
                 )
                 if isinstance(result, dict) and 'error' in result:
@@ -326,8 +341,13 @@ def main():
     spqr_web = SPQRWeb()
     
     # Vérifier/construire les images Docker
-    if not spqr_web.spqr.ensure_docker_images():
-        st.error("❌ Erreur lors de la construction des images Docker")
+    try:
+        if not spqr_web.spqr.ensure_docker_images():
+            st.error("❌ Erreur lors de la construction des images Docker")
+            st.error("Vérifiez les logs Docker et relancez l'application")
+            st.stop()
+    except Exception as e:
+        st.error(f"❌ Erreur lors de la vérification des images Docker: {str(e)}")
         st.stop()
         
     if 'page' not in st.session_state:
