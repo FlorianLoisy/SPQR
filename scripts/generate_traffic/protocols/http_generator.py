@@ -1,5 +1,6 @@
 from .base_generator import ProtocolGenerator
 from scapy.all import *
+from scapy.packet import Packet
 from dataclasses import dataclass
 from typing import List, Dict, Optional
 import json
@@ -52,9 +53,17 @@ class HTTPConfig:
         return instance
 
 class HTTPGenerator(ProtocolGenerator):
-    def __init__(self, config: HTTPConfig):
-        super().__init__()
-        self.config = config
+    def __init__(self, config: dict):
+        super().__init__(config=config)
+
+        # Convertir la config plate en HTTPConfig
+        self.http_config = HTTPConfig(
+            src_ip=self.source_ip,      # depuis ProtocolGenerator
+            dst_ip=self.dest_ip,        # depuis ProtocolGenerator
+            src_port=self.source_port,  # depuis ProtocolGenerator
+            dst_port=self.dest_port     # depuis ProtocolGenerator
+        )
+
         self.seq = random.randint(1000, 9999)
         self.ack = 0
 
@@ -92,20 +101,20 @@ class HTTPGenerator(ProtocolGenerator):
     
     def _generate_handshake(self) -> List[Packet]:
         # SYN
-        syn = IP(src=self.config.src_ip, dst=self.config.dst_ip) / \
-              TCP(sport=self.config.src_port, dport=self.config.dst_port,
+        syn = IP(src=self.http_config.src_ip, dst=self.http_config.dst_ip) / \
+              TCP(sport=self.http_config.src_port, dport=self.http_config.dst_port,
                   seq=self.seq, flags='S')
         
         # SYN-ACK
         self.ack = self.seq + 1
-        syn_ack = IP(src=self.config.dst_ip, dst=self.config.src_ip) / \
-                  TCP(sport=self.config.dst_port, dport=self.config.src_port,
+        syn_ack = IP(src=self.http_config.dst_ip, dst=self.http_config.src_ip) / \
+                  TCP(sport=self.http_config.dst_port, dport=self.http_config.src_port,
                       seq=self.ack, ack=self.ack, flags='SA')
         
         # ACK
         self.seq = self.ack
-        ack = IP(src=self.config.src_ip, dst=self.config.dst_ip) / \
-              TCP(sport=self.config.src_port, dport=self.config.dst_port,
+        ack = IP(src=self.http_config.src_ip, dst=self.http_config.dst_ip) / \
+              TCP(sport=self.http_config.src_port, dport=self.http_config.dst_port,
                   seq=self.seq, ack=self.ack + 1, flags='A')
         
         return [syn, syn_ack, ack]
@@ -113,14 +122,14 @@ class HTTPGenerator(ProtocolGenerator):
     def _generate_http_request(self, payload: bytes) -> List[Packet]:
         # PSH-ACK with HTTP request
         self.seq += 1
-        request = IP(src=self.config.src_ip, dst=self.config.dst_ip) / \
-                 TCP(sport=self.config.src_port, dport=self.config.dst_port,
+        request = IP(src=self.http_config.src_ip, dst=self.http_config.dst_ip) / \
+                 TCP(sport=self.http_config.src_port, dport=self.http_config.dst_port,
                      seq=self.seq, ack=self.ack + 1, flags='PA') / \
                  Raw(load=payload)
         
         # Server ACK
-        server_ack = IP(src=self.config.dst_ip, dst=self.config.src_ip) / \
-                    TCP(sport=self.config.dst_port, dport=self.config.src_port,
+        server_ack = IP(src=self.http_config.dst_ip, dst=self.http_config.src_ip) / \
+                    TCP(sport=self.http_config.dst_port, dport=self.http_config.src_port,
                         seq=self.ack + 1, ack=self.seq + len(payload), flags='A')
         
         self.seq += len(payload)
@@ -130,14 +139,14 @@ class HTTPGenerator(ProtocolGenerator):
     
     def _generate_http_response(self, payload: bytes) -> List[Packet]:
         # PSH-ACK with HTTP response
-        response = IP(src=self.config.dst_ip, dst=self.config.src_ip) / \
-                  TCP(sport=self.config.dst_port, dport=self.config.src_port,
+        response = IP(src=self.http_config.dst_ip, dst=self.http_config.src_ip) / \
+                  TCP(sport=self.http_config.dst_port, dport=self.http_config.src_port,
                       seq=self.ack, ack=self.seq, flags='PA') / \
                   Raw(load=payload)
         
         # Client ACK
-        client_ack = IP(src=self.config.src_ip, dst=self.config.dst_ip) / \
-                    TCP(sport=self.config.src_port, dport=self.config.dst_port,
+        client_ack = IP(src=self.http_config.src_ip, dst=self.http_config.dst_ip) / \
+                    TCP(sport=self.http_config.src_port, dport=self.http_config.dst_port,
                         seq=self.seq, ack=self.ack + len(payload), flags='A')
         
         self.ack += len(payload)
@@ -146,18 +155,18 @@ class HTTPGenerator(ProtocolGenerator):
     
     def _generate_teardown(self) -> List[Packet]:
         # FIN from client
-        fin = IP(src=self.config.src_ip, dst=self.config.dst_ip) / \
-              TCP(sport=self.config.src_port, dport=self.config.dst_port,
+        fin = IP(src=self.http_config.src_ip, dst=self.http_config.dst_ip) / \
+              TCP(sport=self.http_config.src_port, dport=self.http_config.dst_port,
                   seq=self.seq, ack=self.ack, flags='FA')
         
         # FIN-ACK from server
-        fin_ack = IP(src=self.config.dst_ip, dst=self.config.src_ip) / \
-                  TCP(sport=self.config.dst_port, dport=self.config.src_port,
+        fin_ack = IP(src=self.http_config.dst_ip, dst=self.http_config.src_ip) / \
+                  TCP(sport=self.http_config.dst_port, dport=self.http_config.src_port,
                       seq=self.ack, ack=self.seq + 1, flags='FA')
         
         # Final ACK from client
-        last_ack = IP(src=self.config.src_ip, dst=self.config.dst_ip) / \
-                   TCP(sport=self.config.src_port, dport=self.config.dst_port,
+        last_ack = IP(src=self.http_config.src_ip, dst=self.http_config.dst_ip) / \
+                   TCP(sport=self.http_config.src_port, dport=self.http_config.dst_port,
                        seq=self.seq + 1, ack=self.ack + 1, flags='A')
         
         return [fin, fin_ack, last_ack]
@@ -166,21 +175,21 @@ class HTTPGenerator(ProtocolGenerator):
         """Construit la requête HTTP avec les paramètres configurés"""
         # Construire les en-têtes HTTP
         headers = {
-            "Host": self.config.host,
-            "User-Agent": self.config.user_agent,
+            "Host": self.http_config.host,
+            "User-Agent": self.http_config.user_agent,
             "Connection": "close"
         }
         
         # Ajouter les en-têtes personnalisés
-        if self.config.custom_headers:
-            headers.update(self.config.custom_headers)
+        if self.http_config.custom_headers:
+            headers.update(self.http_config.custom_headers)
         
         # Construire la requête
         request_lines = [
-            f"{self.config.method} {self.config.path} HTTP/{self.config.version}",
+            f"{self.http_config.method} {self.http_config.path} HTTP/{self.http_config.version}",
             *[f"{k}: {v}" for k, v in headers.items()],
             "",  # Ligne vide pour séparer les en-têtes du corps
-            self.config.body
+            self.http_config.body
         ]
         
         return "\r\n".join(request_lines).encode()
