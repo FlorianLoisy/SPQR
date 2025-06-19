@@ -68,32 +68,51 @@ class SPQRSimple:
             "report_file": report_file
         }
 
-    def generate_pcap(self, attack_type: str, config: Optional[Dict] = None) -> Dict:
+    def generate_pcap(self, attack_type: str, config: dict) -> dict:
         """
         Génère un PCAP à partir d'un certain attack_type déclaré en config.
+    
+        Args:
+            attack_type (str): Type de trafic à générer
+            config (dict): Configuration plate contenant tous les paramètres
+
+        Returns:
+            dict: Résultat contenant le chemin du fichier PCAP ou une erreur
         """
         try:
+            # Utiliser la config par défaut si nécessaire
             if config is None:
                 config = {
-                    "network": self.config["network"],
-                    "protocol": {},
-                    "options": {"packet_count": 1, "time_interval": 0}
+                    "source_ip": "192.168.1.10",
+                    "dest_ip": "192.168.1.20",
+                    "source_port": 12345,
+                    "dest_port": 80,
+                    "packet_count": 1,
+                    "time_interval": 0
                 }
+            # Récupérer le type de protocole depuis la configuration des patterns
             protocol_type = self.config["traffic_patterns"][attack_type].get("payload_type", "http")
-            generator = ProtocolGeneratorFactory.create_generator(
-                protocol_type=protocol_type,
-                config={**config["network"], **config["protocol"]}
-            )
-            generator.set_options(config.get("options", {}))
+        
+            # Créer un dictionnaire de configuration pour le générateur
+            generator_config = config.copy()  # Copier la config pour ne pas la modifier
+        
+            # Créer le générateur avec la configuration complète
+            generator = ProtocolGeneratorFactory.create_generator(protocol_type, generator_config)
+       
+            # Générer les paquets
             packets = generator.generate()
             if not packets:
                 return {"error": "Aucun paquet généré"}
+            
+            # Sauvegarder le PCAP
             output_dir = Path(self.config["pcap"]["output_dir"])
             output_dir.mkdir(parents=True, exist_ok=True)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             pcap_file = output_dir / f"{attack_type}_{timestamp}.pcap"
             wrpcap(str(pcap_file), packets)
+        
             return {"pcap_file": str(pcap_file)}
+        
         except Exception as e:
             logger.error(f"Error generating PCAP: {str(e)}")
             return {"error": str(e)}

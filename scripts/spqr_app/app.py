@@ -145,22 +145,42 @@ def show_pcap_generation():
 
     # Bloc configuration réseau
     st.subheader("Paramètres réseau")
-    default_network = {
-        "source_ip": "192.168.1.10",
-        "dest_ip": "192.168.1.20",
-        "source_port": 12345,
-        "dest_port": 80
-    }
-    # Supprimer le préfixe 'network_' de la configuration
     network_config = {}
-    temp_config = display_config_block(spqr_web.config.get("network", default_network), key_prefix="network_")
-    for key, value in temp_config.items():
+    network_config["source_ip"] = st.text_input(
+        "IP source",
+        value="192.168.1.10",
+        help="Adresse IP source des paquets"
+    )
+    network_config["dest_ip"] = st.text_input(
+        "IP destination",
+        value="192.168.1.20",
+        help="Adresse IP destination des paquets"
+    )
+    network_config["source_port"] = st.number_input(
+        "Port source",
+        value=12345,
+        min_value=1,
+        max_value=65535,
+        help="Port source des paquets"
+    )
+    network_config["dest_port"] = st.number_input(
+        "Port destination",
+        value=80,
+        min_value=1,
+        max_value=65535,
+        help="Port destination des paquets"
+    )
+    # Supprimer le préfixe 'network_' de la configuration
+#    network_config = display_config_block(default_network)
+#    temp_config = display_config_block(spqr_web.config.get("network", default_network), key_prefix="network_")
+#    for key, value in temp_config.items():
         # Enlever le préfixe 'network_'
-        clean_key = key.replace('network_', '')
-        network_config[clean_key] = value
+#        clean_key = key.replace('network_', '')
+#        network_config[clean_key] = value
 
     # Bloc options de génération
     st.subheader("Options")
+    options = {}
     if protocol_type in ("http", "dns", "icmp", "quic"):
         option_map = {
             "http": dict(packet_count=10, time_interval=100),
@@ -180,17 +200,28 @@ def show_pcap_generation():
     if st.button("🚀 Générer PCAP"):
         with st.spinner("Génération du fichier PCAP en cours..."):
             try:
-                # Fusionner toutes les configurations dans un seul dictionnaire
-                generation_config = {
-                    **network_config,  # Configuration réseau de base
-                    **edited_config,   # Configuration du protocole
-                    **options         # Options de génération
+                # Prepare base configuration
+                base_config = {
+                    # Network parameters (flat structure)
+                    "source_ip": network_config["source_ip"],
+                    "dest_ip": network_config["dest_ip"],
+                    "source_port": int(network_config["source_port"]),
+                    "dest_port": int(network_config["dest_port"]),
+                    # Add protocol configuration
+                    "protocol": protocol_type,
+                    # Add packet count and time interval
+                    "packet_count": options.get("packet_count", 1),
+                    "time_interval": options.get("time_interval", 0)
                 }
 
+                # Add protocol specific parameters
+                if edited_config:
+                    base_config.update(edited_config)
+
                 result = spqr_web.spqr.generate_pcap(
-                    protocol_type=protocol_type,
+#                    protocol_type=protocol_type,
                     attack_type=attack_type,
-                    config=generation_config
+                    config=base_config
                 )
                 if isinstance(result, dict) and 'error' in result:
                     st.error(f"❌ Erreur: {result['error']}")
