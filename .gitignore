@@ -9,6 +9,7 @@
 
 # Ignorer tous les fichiers temporaires
 *.tmp
+temp/
 
 # Ignorer un dossier spécifique
 __pycache__/
