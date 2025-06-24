@@ -44,10 +44,10 @@ RUN ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --enable-lu
     make install-full
 
 # Mise à jour de Suricata
-COPY config/suricata_7.0.2/suricata.yaml /etc/suricata/suricata.yaml
-COPY config/suricata_7.0.2/classification.config /etc/suricata/classification.config
-COPY config/suricata_7.0.2/reference.config /etc/suricata/reference.config
-COPY config/suricata_7.0.2/rules/suricata.rules /etc/suricata/rules/suricata.rules
+#COPY config/suricata_7.0.2/suricata.yaml /etc/suricata/suricata.yaml
+#COPY config/suricata_7.0.2/classification.config /etc/suricata/classification.config
+#COPY config/suricata_7.0.2/reference.config /etc/suricata/reference.config
+#COPY config/suricata_7.0.2/rules/suricata.rules /etc/suricata/rules/suricata.rules
 #RUN /etc/suricata/suricata-update.sh
 
 # Nettoyez 
