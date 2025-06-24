@@ -33,7 +33,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiez et extrayez les sources de Suricata
-ADD suricata-6.0.15.tar.gz /tmp/
+ADD images_docker/Docker_Suricata-6.0.15/suricata-6.0.15.tar.gz /tmp/
 WORKDIR /tmp/suricata-6.0.15
 
 # Configurez, compilez et installez Suricata
@@ -45,9 +45,10 @@ RUN ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --enable-lu
 #RUN pip3 install --pre --upgrade suricata-update PyYAML
 #COPY ressources/suricata/suricata-update.sh /etc/suricata/suricata-update.sh
 #RUN chmod +x /etc/suricata/suricata-update.sh
-#COPY ressources/suricata/suricata-6.0.15.yaml /etc/suricata/suricata.yaml
-#COPY ressources/suricata/classification.config /etc/suricata/classification.config
-#COPY ressources/suricata/reference.config /etc/suricata/reference.config
+COPY config/suricata_6.0.15/suricata.yaml /etc/suricata/suricata.yaml
+COPY config/suricata_6.0.15/classification.config /etc/suricata/classification.config
+COPY config/suricata_6.0.15/reference.config /etc/suricata/reference.config
+COPY config/suricata_6.0.15/rules/suricata.rules /etc/suricata/rules/suricata.rules
 #RUN /etc/suricata/suricata-update.sh
 
 # Nettoyez 

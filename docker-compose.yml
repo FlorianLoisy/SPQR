@@ -32,28 +32,28 @@ services:
 
   suricata6015:
     build:
-      context: ./images_docker/Docker_Suricata-6.0.15
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: images_docker/Docker_Suricata-6.0.15/Dockerfile
     container_name: suricata6015
     image: spqr_suricata6015
-    volumes:
-      - ./config/suricata_6.0.15/suricata.yaml:/etc/suricata/suricata.yaml:ro
-      - ./config/suricata_6.0.15/rules:/etc/suricata/rules:ro
-      - ./output/logs:/var/log/suricata
+#    volumes:
+#      - ./config/suricata_6.0.15/suricata.yaml:/etc/suricata/suricata.yaml:ro
+#      - ./config/suricata_6.0.15/rules:/etc/suricata/rules:ro
+#      - ./output/logs:/var/log/suricata
     entrypoint: ["/usr/bin/suricata"]
     command: ["-V"]
 
 
   suricata702:
     build:
-      context: ./images_docker/Docker_Suricata-7.0.2
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: images_docker/Docker_Suricata-7.0.2/Dockerfile
     container_name: suricata702
     image: spqr_suricata702
-    volumes:
-      - ./config/suricata_7.0.2/suricata.yaml:/etc/suricata/suricata.yaml:ro
-      - ./config/suricata_7.0.2/rules:/etc/suricata/rules:ro
-      - ./output/logs:/var/log/suricata
+#    volumes:
+#      - ./config/suricata_7.0.2/suricata.yaml:/etc/suricata/suricata.yaml:ro
+#      - ./config/suricata_7.0.2/rules:/etc/suricata/rules:ro
+#      - ./output/logs:/var/log/suricata
     entrypoint: ["/usr/bin/suricata"]
     command: ["-V"]
 

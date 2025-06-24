@@ -3,6 +3,7 @@ import json
 import shutil
 import subprocess
 import logging
+import streamlit as st
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -12,6 +13,12 @@ from scripts.utils.utils import abs_path
 from scripts.generate_traffic import ProtocolGeneratorFactory
 
 logger = logging.getLogger("SPQR")
+
+def log_debug(*args):
+    """Affiche un message dans l'interface Streamlit (et la console aussi pour debug CLI)"""
+    message = " ".join(str(a) for a in args)
+    st.text(message)
+    print(message)
 
 class SPQRSimple:
     """
@@ -56,7 +63,7 @@ class SPQRSimple:
         except Exception as e:
             return {"error": str(e)}
 
-        log_file = self.test_rules(pcap_path)
+        log_file = self.analyze_pcap(pcap_path)
         if not log_file:
             return {"error": "Test échoué"}
 
@@ -105,7 +112,7 @@ class SPQRSimple:
                 return {"error": "Aucun paquet généré"}
             
             # Sauvegarder le PCAP
-            output_dir = Path(self.config["pcap"]["output_dir"])
+            output_dir = Path(self.config["output"]["pcap_dir"])
             output_dir.mkdir(parents=True, exist_ok=True)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             pcap_file = output_dir / f"{attack_type}_{timestamp}.pcap"
@@ -116,58 +123,6 @@ class SPQRSimple:
         except Exception as e:
             logger.error(f"Error generating PCAP: {str(e)}")
             return {"error": str(e)}
-
-    def test_rules(self, pcap_file: str, rules_file: str = None) -> str:
-        """
-        Lance un IDS sur le PCAP fourni avec les règles appropriées (par défaut: Suricata docker).
-        """
-        engine = self.config.get("engine", {})
-        engine_type = engine.get("type", "suricata")
-        version = engine.get("version", "6.0.15")
-        mode = engine.get("mode", "docker")
-
-        log_dir = Path(self.config["suricata"]["log_dir"]).absolute()
-        config_path = Path(self.config["suricata"]["config_file"]).absolute()
-        rules_path = Path(rules_file or self.config["suricata"]["rules_file"]).absolute()
-        pcap_path = Path(pcap_file).absolute()
-
-        if not pcap_path.is_file() or not config_path.is_file() or not rules_path.is_file():
-            logger.error(f"Fichier manquant pour le test: pcap={pcap_path}, config={config_path}, rules={rules_path}")
-            return None
-
-        os.makedirs(log_dir, exist_ok=True)
-
-        if mode == "docker":
-            image = f"spqr_{engine_type}_{version}"
-            cmd = [
-                "docker", "run", "--rm",
-                "--entrypoint", "sh", image,
-                "-c", f"mkdir -p /etc/suricata/rules && suricata -c /etc/suricata/suricata.yaml -S /etc/suricata/rules/suricata.rules -r /input.pcap -l /var/log/suricata",
-                "-v", f"{pcap_path}:/input.pcap:ro",
-                "-v", f"{config_path}:/etc/suricata/suricata.yaml:ro",
-                "-v", f"{rules_path}:/etc/suricata/rules/suricata.rules:ro",
-                "-v", f"{log_dir}:/var/log/suricata"
-            ]
-            try:
-                subprocess.run(cmd, check=True, capture_output=True)
-                return str(log_dir / "eve.json")
-            except subprocess.CalledProcessError as e:
-                logger.error(f"Command failed: {e.stdout}\n{e.stderr}")
-                return None
-        else:
-            cmd = [
-                "suricata",
-                "-c", str(config_path),
-                "-S", str(rules_path),
-                "-r", str(pcap_path),
-                "-l", str(log_dir)
-            ]
-            try:
-                subprocess.run(cmd, check=True)
-                return str(log_dir / "eve.json")
-            except subprocess.CalledProcessError as e:
-                logger.error(f"Suricata failed: {e}")
-                return None
 
     def generate_report(self, log_file: str) -> str:
         """
@@ -204,31 +159,6 @@ class SPQRSimple:
         except Exception as e:
             logger.error(f"Erreur lors de la génération du rapport : {e}")
             return None
-
-    def test_with_engine(self, pcap_file: str, engine_type: str, version: str) -> Dict:
-        """
-        Test PCAP with a specific engine (type and version)
-        """
-        try:
-            engine_config = {
-                "type": engine_type,
-                "version": version,
-                "mode": "docker"
-            }
-            self.config["engine"] = engine_config
-            log_file = self.test_rules(pcap_file)
-            if not log_file:
-                return {"error": "Test failed"}
-            alert_count = 0
-            if os.path.exists(log_file):
-                with open(log_file) as f:
-                    alert_count = sum(1 for line in f if '"event_type":"alert"' in line)
-            return {
-                "log_file": log_file,
-                "alert_count": alert_count
-            }
-        except Exception as e:
-            return {"error": str(e)}
 
     def test_all_engines(self, pcap_file: str) -> Dict:
         """
@@ -360,69 +290,141 @@ Unique Signatures: {stats['unique_signatures']}
 Generated by SPQR (Security Package for Quick Response)
 """
 
-    def _run_ids_analysis(self, pcap_path: str, engine: str, log_dir: Path, rules: str = None, custom_rules_file: str = None) -> dict:
+    def _run_ids_analysis(self, pcap_path: str, engine: str, log_dir: Path, rules: str = None, custom_rules_file: str = None, cleanup: bool = True) -> dict:
         """
-        Run IDS analysis with specified engine and rules.
+        Lance l’analyse IDS avec un moteur Dockerisé (Suricata ou Snort).
+
+        Args:
+            pcap_path (str): Chemin du fichier PCAP.
+            engine (str): Format `nom_version` (ex: suricata_6.0.15).
+            log_dir (Path): Dossier des logs à monter.
+            rules (str): Règles inline (facultatif).
+            custom_rules_file (BytesIO): Règles sous forme de fichier (facultatif).
+            cleanup (bool): Supprime le répertoire temporaire à la fin.
+
+        Returns:
+            dict: Résultats avec alertes, log utilisé, image utilisée.
         """
         try:
-            pcap_path = Path(pcap_path).absolute()
-            log_dir = Path(log_dir).absolute()
+            # Extraire type/version
             engine_name, version = engine.lower().split("_", 1)
             image_name = f"spqr_{engine_name}{version.replace('.', '')}"
-            temp_dir = Path("/tmp/spqr_analysis").absolute()
+
+            project_root = Path(__file__).resolve().parents[2]  # ← Racine du projet SPQR
+            base_temp = project_root / "temp"
+            temp_dir = base_temp / "temp" / f"spqr_analysis_{engine_name}{version.replace('.', '')}"
             temp_dir.mkdir(parents=True, exist_ok=True)
-            try:
-                rules_path = temp_dir / "custom.rules"
-                if custom_rules_file:
-                    rules_path.write_bytes(custom_rules_file.getvalue())
-                elif rules:
-                    rules_path.write_text(rules)
-                else:
-                    default_rules = Path(f"config/{engine_name}{version}/rules/suricata.rules").absolute()
-                    if default_rules.exists():
-                        rules_path.write_text(default_rules.read_text())
-                    else:
-                        raise FileNotFoundError(f"No rules found at {default_rules}")
-                config_path = Path(f"config/{engine_name}{version}/suricata.yaml").absolute()
-                if not config_path.exists():
-                    raise FileNotFoundError(f"No configuration file found at {config_path}")
-                temp_config = temp_dir / "suricata.yaml"
-                shutil.copy2(config_path, temp_config)
-                log_dir.mkdir(parents=True, exist_ok=True)
+            pcap_path = Path(pcap_path).absolute()
+            log_dir = base_temp / Path(log_dir).absolute()
+            log_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Gestion des règles
+             
+            rules_dir = temp_dir / "rules"
+            rules_dir.mkdir(parents=True, exist_ok=True)
+            rules_filename = (f"{engine_name}.rules")
+            rules_path = rules_dir / rules_filename
+
+            if custom_rules_file:
+                rules_path.write_bytes(custom_rules_file.getvalue())
+            elif rules:
+                rules_path.write_text(rules)
+            else:
+                default_rules = Path(f"config/{engine_name}_{version}/rules/{rules_filename}").absolute()
+                if not default_rules.exists():
+                    raise FileNotFoundError(f"❌ Fichier de règles introuvable : {default_rules}")
+                rules_path.write_text(default_rules.read_text())
+                
+            # Préparation de la config
+            config_name = "suricata.yaml" if engine_name == "suricata" else "snort.conf"
+            config_path = Path(f"config/{engine_name}_{version}/{config_name}").absolute()
+            if not config_path.exists():
+                raise FileNotFoundError(f"No configuration file found at {config_path}")
+                
+            config_file = temp_dir / config_name
+            log_debug("✔️ CONFIG PATH:", config_path)
+            log_debug("✔️ COPIED TO:", config_file)
+            shutil.copy2(config_path, config_file)
+            log_debug("CONFIG SOURCE EXISTS:", config_path.exists(), config_path)
+                
+            # Construction de la commande
+            volume_mounts = [
+            "-v", f"{pcap_path}:/input.pcap:ro",
+#            "-v", f"{rules_path}:/custom_config/{engine_name}/spqr_{rules_filename}",
+#            "-v", f"{temp_dir}/{config_name}:/custom_config/{engine_name}/spqr_{config_name}",
+            "-v", f"{temp_dir}:/custom_config/",
+            "-v", f"{log_dir}:/var/log/{engine_name}"
+        ]
+                
+            if engine_name == "suricata":
                 cmd = [
                     "docker", "run", "--rm",
-                    "-v", f"{pcap_path}:/input.pcap:ro",
-                    "-v", f"{rules_path}:/etc/suricata/rules/custom.rules:ro",
-                    "-v", f"{temp_config}:/etc/suricata/suricata.yaml:ro",
-                    "-v", f"{log_dir}:/var/log/suricata",
+                    *volume_mounts,
                     image_name,
-                    "suricata" if engine_name == "suricata" else "snort",
-                    "-c", "/etc/suricata/suricata.yaml" if engine_name == "suricata" else "/etc/snort/snort.conf",
-                    "-S", "/etc/suricata/rules/custom.rules" if engine_name == "suricata" else None,
+                    "suricata" ,
+                    "-c", f"/custom_config/{config_name}",
+                    "-S", f"/custom_config/{rules_filename}",
                     "-r", "/input.pcap",
-                    "-l", "/var/log/suricata" if engine_name == "suricata" else "/var/log/snort"
+                    "-l", f"/var/log/{engine_name}"
                 ]
-                # Remove None and convert to str
-                cmd = [str(arg) for arg in cmd if arg is not None]
-                logger.debug(f"Running command: {' '.join(cmd)}")
-                subprocess.run(cmd, check=True, capture_output=True)
-                alerts = []
-                log_file = log_dir / ("fast.log" if engine_name == "suricata" else "alert")
-                if log_file.exists():
-                    with open(log_file) as f:
-                        for line in f:
-                            if line.strip():
-                                alerts.append({"raw": line.strip()})
-                return {"alerts": alerts}
-            finally:
-                if temp_dir.exists():
-                    shutil.rmtree(temp_dir)
+                log_file = log_dir / "fast.log"
+                    
+            elif engine_name == "snort":
+                cmd = [
+                    "docker", "run", "--rm",
+                    *volume_mounts,
+                    image_name,
+                    "snort",
+                    "-c", f"/etc/{engine_name}/{config_name}",
+                    "-r", "/input.pcap",
+                    "-l", f"/var/log/{engine_name}"
+                ]
+                log_file = log_dir / "alert"
+                
+            else:
+                raise ValueError(f"❌ Moteur IDS non pris en charge : {engine_name}")
+                
+            # Exécution
+            log_debug(f"📄 Fichier config utilisé : {config_file}")
+            log_debug(f"📄 Fichier rules utilisé : {rules_path}")
+            log_debug(f"📁 Contenu du dossier temporaire : {[str(p) for p in temp_dir.glob('**/*')]}")
+            log_debug(f"🔍 Exécution de : {' '.join(cmd)}")
+            log_debug("📁 Contenu final temp_dir:", os.listdir(temp_dir))
+            log_debug("📁 Contenu /etc/suricata sera visible dans le conteneur")
+            log_debug("📁 Vérification avant exécution:")
+#            log_debug("docker run --rm -v {}:/etc/suricata {} ls -l /etc/suricata".format(temp_dir, image_name))
+
+            result = subprocess.run(cmd, check=True, capture_output=True)
+            log_debug("📤 STDOUT:", result.stdout.decode())
+            log_debug("📥 STDERR:", result.stderr.decode())
+            log_debug(f"✅ Docker exécuté avec succès pour {engine_name}_{version}")
+
+            # Lecture des alertes
+            alerts = []
+            if log_file.exists():
+                with open(log_file) as f:
+                    for line in f:
+                        if line.strip():
+                            alerts.append({"raw": line.strip()})
+
+            return {
+                "alerts": alerts,
+                "engine": f"{engine_name}_{version}",
+                "log_file": str(log_file),
+                "image_used": image_name
+            }
+            
         except subprocess.CalledProcessError as e:
-            logger.error(f"IDS analysis failed: {e.stdout}\n{e.stderr}")
+            log_debug(f"❌ Échec Docker : {e.stderr}")
             raise RuntimeError(f"IDS analysis failed: {e.stderr}")
+        
         except Exception as e:
             logger.error(f"Error during IDS analysis: {str(e)}")
             raise
+        
+        finally:
+            if cleanup and temp_dir.exists():
+                shutil.rmtree(temp_dir)
         
     def ensure_docker_images(self) -> bool:
         """Vérifie la présence des images Docker requises."""

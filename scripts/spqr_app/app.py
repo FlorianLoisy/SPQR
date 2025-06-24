@@ -97,7 +97,7 @@ class SPQRWeb:
                 raise FileNotFoundError(f"PCAP file not found: {pcap_path}")
 
             custom_rules = parse_custom_rule_input(rules, custom_rules_file)
-            results = self.spqr.analyze_pcap(pcap_path, engine, rules=custom_rules, custom_rules_file=None)
+            results = self.spqr.analyze_pcap(pcap_path, engine, rules=custom_rules, custom_rules_file=custom_rules_file)
             if not results:
                 logger.warning(f"No results returned for {engine}")
                 return {"alerts": []}
@@ -134,7 +134,7 @@ def show_pcap_generation():
     else:
         attack_type = st.selectbox("Type de trafic à générer", attack_types)
 
-    st.info(spqr_web.config["traffic_patterns"][attack_type]["description"])
+    st.info(spqr_web.config["traffic_patterns"][attack_type].get("description", ""))
     protocol_config, protocol_type = get_protocol_config(spqr_web, attack_type)
     options = {}
 
@@ -367,7 +367,7 @@ def show_ids_testing():
                 logger.exception("Erreur lors de l'analyse")
             finally:
                 # Nettoyage
-                if temp_pcap.exists():
+                if 'temp_pcap' in locals() and temp_pcap.exists():
                     temp_pcap.unlink()
 
     # Afficher l'aide
@@ -434,6 +434,7 @@ def main():
         if not spqr_web.spqr.ensure_docker_images():
             st.error("❌ Erreur lors de la construction des images Docker")
             st.error("Vérifiez les logs Docker et relancez l'application")
+            logger.error("Échec lors de la vérification/présence des images Docker requises.")
             st.stop()
     except Exception as e:
         st.error(f"❌ Erreur lors de la vérification des images Docker: {str(e)}")
