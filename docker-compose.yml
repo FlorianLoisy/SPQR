@@ -8,6 +8,7 @@ services:
     ports:
       - "8501:8501"
     volumes:
+      - ./temp:/app/temp
       - ./scripts:/app/scripts
       - ./config:/app/config
       - ./output:/data/output
