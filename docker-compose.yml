@@ -16,6 +16,7 @@ services:
     environment:
       - PYTHONPATH=/app
       - PCAP_OUTPUT_DIR=/data/output/pcap
+      - HOST_PROJECT_PATH=${HOST_PROJECT_PATH:-${PWD}}
     # Add Docker group to container
     group_add:
       - "${DOCKER_GROUP_ID:-999}"  # Default Docker group ID if not specified
