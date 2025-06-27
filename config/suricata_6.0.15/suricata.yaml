@@ -1970,9 +1970,9 @@ config reference: msft      http://technet.microsoft.com/security/bulletin/
 ## Auxiliary configuration files.
 ##
 
-#classification-file: /data/config/classification.config
-#reference-config-file: /data/config/reference.config
-#threshold-file: /data/config/threshold.config
+classification-file: ./classification.config
+reference-config-file: ./reference.config
+threshold-file: ./threshold.config
 
 ##
 ## Include other configs
