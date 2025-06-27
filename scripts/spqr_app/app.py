@@ -1,3 +1,4 @@
+import uuid
 import streamlit as st
 import pandas as pd
 import json
@@ -327,8 +328,10 @@ def show_ids_testing():
         with st.spinner("Analyse en cours..."):
             try:
                 # Sauvegarder le PCAP temporairement
-                temp_pcap = Path("temp") / pcap_file.name
-                temp_pcap.parent.mkdir(exist_ok=True)
+                unique_id = uuid.uuid4().hex
+                temp_dir = Path("temp")
+                temp_dir.mkdir(exist_ok=True)
+                temp_pcap = temp_dir / f"{unique_id}_{pcap_file.name}"
                 temp_pcap.write_bytes(pcap_file.getvalue())
 
                 # Configurer le moteur
@@ -462,28 +465,36 @@ def parse_ids_alerts(log_content: str, engine_type: str) -> list:
             continue
         try:
             if engine_type.lower().startswith("suricata"):
-                # Try to parse JSON first
                 try:
                     entry = json.loads(line)
                     if entry.get("event_type") == "alert":
-                        alerts.append(entry)
-                        continue
-                except Exception:
-                    pass  # fallback below
-            parts = line.split("[**]")
-            if len(parts) < 2:
-                continue
-            timestamp = parts[0].strip()
-            rule_parts = [p.strip() for p in parts[1].split("]") if p]
-            msg = rule_parts[-1] if rule_parts else "Unknown"
-            alerts.append({
-                "timestamp": timestamp,
-                "message": msg,
-                "rule": rule_parts[0] if rule_parts else "Unknown",
-                "priority": rule_parts[2][9:] if len(rule_parts) > 2 and rule_parts[2].startswith("priority:") else "Unknown"
-            })
+                        alerts.append({
+                            "timestamp": entry.get("timestamp"),
+                            "alert": entry.get("alert", {}).get("signature"),
+                            "severity": entry.get("alert", {}).get("severity"),
+                            "src_ip": entry.get("src_ip"),
+                            "dest_ip": entry.get("dest_ip"),
+                            "proto": entry.get("proto"),
+                        })
+                except json.JSONDecodeError:
+                    logger.warning("Ligne JSON invalide dans les logs Suricata")
+                    continue
+            elif engine_type.lower().startswith("snort"):
+                # Very basic parser for Snort's typical alert format
+                if "[**]" in line:
+                    alert_parts = line.split("[**]")
+                    if len(alert_parts) >= 2:
+                        alert_msg = alert_parts[1].strip()
+                        alerts.append({
+                            "timestamp": "N/A",
+                            "alert": alert_msg,
+                            "severity": "N/A",
+                            "src_ip": "N/A",
+                            "dest_ip": "N/A",
+                            "proto": "N/A"
+                        })
         except Exception as e:
-            logger.warning(f"Failed to parse alert line: {line[:100]}... Error: {str(e)}")
+            logger.warning(f"Erreur lors du parsing de la ligne: {line} - {str(e)}")
             continue
     return alerts
 
