@@ -5,6 +5,7 @@ import json
 import logging
 import subprocess
 import requests
+import shutil
 from scripts.generate_traffic.protocol_factory import ProtocolGeneratorFactory
 from scripts.utils.utils import abs_path, load_json_or_yaml
 from scripts.process.process import SPQRSimple
@@ -446,7 +447,7 @@ def main():
         st.session_state.page = "Accueil"
     with st.sidebar:
         st.title("SPQR Navigation")
-        selected = st.radio("Navigation", ["Accueil", "Génération PCAP", "Test de règle IDS"])
+        selected = st.radio("Navigation", ["Accueil", "Génération PCAP", "Test de règle IDS", "Gestion de l'outil"])
         st.session_state.page = selected
     if st.session_state.page == "Accueil":
         show_home()
@@ -454,7 +455,9 @@ def main():
         show_pcap_generation()
     elif st.session_state.page == "Test de règle IDS":
         show_ids_testing()
-
+    elif st.session_state.page == "Gestion de l'outil":
+        show_tool_management() 
+        
 # === ALERT PARSER FACTORISÉ ===
 def parse_ids_alerts(log_content: str, engine_type: str) -> list:
     """Parse alerts from Suricata or Snort log (factorisé)."""
@@ -560,5 +563,33 @@ def get_engine_paths(engine: str) -> dict:
         "output": abs_path("output") / engine_type / version
     }
 
+def show_tool_management():
+    st.header("🛠️ Gestion de l’outil")
+    st.markdown("Supprimez les fichiers temporaires générés par l’outil (dossier `/temp/`).")
+
+    temp_dir = abs_path("temp")
+    if not temp_dir.exists():
+        st.info("Le dossier /temp/ n’existe pas.")
+        return
+
+    temp_files = list(temp_dir.glob("*"))
+    st.write(f"Fichiers temporaires détectés : {len(temp_files)}")
+    if temp_files:
+        for f in temp_files:
+            st.write(f"- {f.name}")
+
+        if st.button("🗑️ Supprimer tous les fichiers temporaires"):
+            try:
+                for f in temp_files:
+                    if f.is_file() or f.is_symlink():
+                        f.unlink()
+                    elif f.is_dir():
+                        shutil.rmtree(f)
+                st.success("Tous les fichiers temporaires ont été supprimés.")
+            except Exception as e:
+                st.error(f"Erreur lors de la suppression : {str(e)}")
+    else:
+        st.info("Aucun fichier temporaire à supprimer.")
+        
 if __name__ == "__main__":
     main()
