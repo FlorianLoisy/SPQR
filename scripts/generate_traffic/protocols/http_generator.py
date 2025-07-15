@@ -35,8 +35,7 @@ class HTTPConfig:
             
         # Appliquer les valeurs par défaut
         for key, value in defaults.items():
-            current = getattr(self, key, None)
-            if current in [None, "", {}, []]:  # valeur absente ou vide
+            if not hasattr(self, key) or getattr(self, key) is None:
                 setattr(self, key, value)
                 
     @classmethod
@@ -68,10 +67,14 @@ class HTTPGenerator(ProtocolGenerator):
             "dst_port": self.dest_port,
         }
 
-        # Fusionner les paramètres de base avec ceux fournis par l'utilisateur
-        merged_params = {**base_params, **(http_params or {})}
+        # On instancie d'abord avec les paramètres de base
+        self.http_config = HTTPConfig(**base_params)
 
-        self.http_config = HTTPConfig(**merged_params)
+        # Puis on écrase explicitement avec les paramètres de l'interface web
+        if http_params:
+            for k, v in http_params.items():
+                if v is not None:
+                    setattr(self.http_config, k, v)
 
         self.seq = random.randint(1000, 9999)
         self.ack = 0

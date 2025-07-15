@@ -218,13 +218,13 @@ def show_pcap_generation():
                 }
 
                 # Paramètres spécifiques au protocole (ex : HTTP)
-                protocol_params = edited_config or {}
+                custom_params = edited_config or {}
 
                 # Génération du PCAP
                 result = spqr_web.spqr.generate_pcap(
                     attack_type=attack_type,
                     config=base_config,
-                    protocol_params=protocol_params  # 👈 Ajout du 2e dict
+                    custom_params=custom_params  # 👈 Ajout du 2e dict
                 )
                 if isinstance(result, dict) and 'error' in result:
                     st.error(f"❌ Erreur: {result['error']}")
