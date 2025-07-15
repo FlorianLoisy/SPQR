@@ -5,6 +5,7 @@ import json
 import logging
 import subprocess
 import requests
+from scripts.generate_traffic.protocol_factory import ProtocolGeneratorFactory
 from scripts.utils.utils import abs_path, load_json_or_yaml
 from scripts.process.process import SPQRSimple
 from typing import Dict, List, Any, Optional
@@ -205,27 +206,25 @@ def show_pcap_generation():
         with st.spinner("Génération du fichier PCAP en cours..."):
             try:
                 # Prepare base configuration
+                # Configuration réseau de base
                 base_config = {
-                    # Network parameters (flat structure)
                     "source_ip": network_config["source_ip"],
                     "dest_ip": network_config["dest_ip"],
                     "source_port": int(network_config["source_port"]),
                     "dest_port": int(network_config["dest_port"]),
-                    # Add protocol configuration
                     "protocol": protocol_type,
-                    # Add packet count and time interval
                     "packet_count": options.get("packet_count", 1),
                     "time_interval": options.get("time_interval", 0)
                 }
 
-                # Add protocol specific parameters
-                if edited_config:
-                    base_config.update(edited_config)
+                # Paramètres spécifiques au protocole (ex : HTTP)
+                protocol_params = edited_config or {}
 
+                # Génération du PCAP
                 result = spqr_web.spqr.generate_pcap(
-#                    protocol_type=protocol_type,
                     attack_type=attack_type,
-                    config=base_config
+                    config=base_config,
+                    protocol_params=protocol_params  # 👈 Ajout du 2e dict
                 )
                 if isinstance(result, dict) and 'error' in result:
                     st.error(f"❌ Erreur: {result['error']}")

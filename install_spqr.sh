@@ -68,7 +68,7 @@ build_images() {
     docker compose build || error "Erreur lors de la construction des images"
     
     # Vérification des images
-    expected_images=("spqr_streamlit" "spqr_suricata:6.0.15" "spqr_suricata:7.0.2" "spqr_snort:2.9" "spqr_snort:3")
+    expected_images=("spqr_streamlit" "spqr_suricata6015" "spqr_suricata702" "spqr_snort29" "spqr_snort3")
     for img in "${expected_images[@]}"; do
         docker image inspect $img >/dev/null 2>&1 || error "Image $img non trouvée"
     done
@@ -92,7 +92,7 @@ test_installation() {
     fi
     
     # Test rapide avec Suricata
-    docker compose exec -T suricata6015 suricata -V || error "Suricata test failed"
+    docker compose exec -T spqr_suricata6015 suricata -V || error "Suricata test failed"
 }
 
 # Nettoyage

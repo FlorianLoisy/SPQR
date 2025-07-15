@@ -76,7 +76,7 @@ class SPQRSimple:
             "report_file": report_file
         }
 
-    def generate_pcap(self, attack_type: str, config: dict) -> dict:
+    def generate_pcap(self, attack_type: str, config: dict, protocol_params: Optional[dict] = None) -> dict:
         """
         Génère un PCAP à partir d'un certain attack_type déclaré en config.
     
@@ -88,6 +88,10 @@ class SPQRSimple:
             dict: Résultat contenant le chemin du fichier PCAP ou une erreur
         """
         try:
+            protocol = config.get("protocol")
+            generator = ProtocolGeneratorFactory.create_generator(protocol, config, extra_params=protocol_params)
+            packets = generator.generate()
+            
             # 🔹 Cas particulier : ICMP planifié via fichier JSON
             if attack_type == "icmp_specifique":
                 json_path = Path("config/config.json")
