@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from .protocols.base_generator import ProtocolGenerator
 from .protocols.http_generator import HTTPGenerator
 from .protocols.dns_generator import DNSGenerator
@@ -15,8 +15,12 @@ class ProtocolGeneratorFactory:
     }
 
     @classmethod
-    def create_generator(cls, protocol_type: str, config: Dict[str, Any]) -> ProtocolGenerator:
+    def create_generator(cls, protocol_type: str, config: Dict[str, Any], custom_params: Optional[Dict[str, Any]] = None, extra_params: Optional[dict] = None) -> ProtocolGenerator:
         generator_class = cls.GENERATORS.get(protocol_type.lower())
         if not generator_class:
             raise ValueError(f"Unsupported protocol type: {protocol_type}")
+        if protocol_type.lower() == "http":
+            return generator_class(config=config, http_params=extra_params)
+        if custom_params:
+            return generator_class(config=config, **custom_params)
         return generator_class(config=config)

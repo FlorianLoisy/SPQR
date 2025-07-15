@@ -17,7 +17,7 @@ class HTTPConfig:
     method: str = "GET"
     path: str = "/"
     version: str = "1.1"
-    host: str = "example.com"
+    host: str = "http-test.com"
     user_agent: str = "SPQR-Test-Agent"
     custom_headers: Dict = None
     body: str = ""
@@ -25,13 +25,18 @@ class HTTPConfig:
     def __post_init__(self):
         # Charger la configuration par défaut
         config_path = Path("config/protocols/http_config.json")
+        
+        if not config_path.exists():
+            return
+    
         with config_path.open() as f:
             config = json.load(f)
-            defaults = config["default"]
+            defaults = config.get("default", {})
             
         # Appliquer les valeurs par défaut
         for key, value in defaults.items():
-            if not hasattr(self, key) or getattr(self, key) is None:
+            current = getattr(self, key, None)
+            if current in [None, "", {}, []]:  # valeur absente ou vide
                 setattr(self, key, value)
                 
     @classmethod
@@ -53,19 +58,24 @@ class HTTPConfig:
         return instance
 
 class HTTPGenerator(ProtocolGenerator):
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, http_params: Optional[dict] = None):
         super().__init__(config=config)
+        print("[DEBUG] http_params transmis :", http_params)
+        base_params = {
+            "src_ip": self.source_ip,
+            "dst_ip": self.dest_ip,
+            "src_port": self.source_port,
+            "dst_port": self.dest_port,
+        }
 
-        # Convertir la config plate en HTTPConfig
-        self.http_config = HTTPConfig(
-            src_ip=self.source_ip,      # depuis ProtocolGenerator
-            dst_ip=self.dest_ip,        # depuis ProtocolGenerator
-            src_port=self.source_port,  # depuis ProtocolGenerator
-            dst_port=self.dest_port     # depuis ProtocolGenerator
-        )
+        # Fusionner les paramètres de base avec ceux fournis par l'utilisateur
+        merged_params = {**base_params, **(http_params or {})}
+
+        self.http_config = HTTPConfig(**merged_params)
 
         self.seq = random.randint(1000, 9999)
         self.ack = 0
+        print("[DEBUG] self.http_config après fusion :", self.http_config)
 
     def generate(self) -> List[Packet]:
         all_packets = []
