@@ -18,9 +18,10 @@ logger = logging.getLogger("SPQR")
 def log_debug(*args):
     """Affiche un message dans l'interface Streamlit (et la console aussi pour debug CLI)"""
     message = " ".join(str(a) for a in args)
-    st.text(message)
-    print(message)
-
+    if st.session_state.get("is_dev_mode", False):
+        st.session_state["log_buffer"].append(message)
+        print(f"[DEBUG] {message}")
+        
 class SPQRSimple:
     """
     Main class for SPQR functionality handling traffic generation and IDS analysis.

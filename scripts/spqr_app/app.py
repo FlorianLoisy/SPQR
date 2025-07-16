@@ -17,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 
 
-# Configure logging
+
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
@@ -469,8 +469,13 @@ def main():
         st.session_state.page = "Accueil"
     with st.sidebar:
         st.title("SPQR Navigation")
+        is_dev_mode = st.sidebar.checkbox("🔍 Activer le mode développeur", value=False)
+        st.session_state["is_dev_mode"] = is_dev_mode
+        if "log_buffer" not in st.session_state:
+            st.session_state["log_buffer"] = []
         selected = st.radio("Navigation", ["Accueil", "Génération PCAP", "Test de règle IDS", "Gestion de l'outil"])
         st.session_state.page = selected
+        
     if st.session_state.page == "Accueil":
         show_home()
     elif st.session_state.page == "Génération PCAP":
@@ -479,6 +484,27 @@ def main():
         show_ids_testing()
     elif st.session_state.page == "Gestion de l'outil":
         show_tool_management() 
+    
+    col_main, col_debug = st.columns([3, 1])  # Layout horizontal
+
+    with col_main:
+    # Interface principale (exécution, protocole, résultats, etc.)
+        st.markdown("## Résultats de l'analyse")
+    
+    if st.session_state.get("is_dev_mode", False):
+        with col_debug.expander("🛠️ Debug", expanded=False):
+            if st.session_state["log_buffer"]:
+                st.code("\n".join(st.session_state["log_buffer"]), language="text")
+            else:
+                st.info("Aucun message de debug.")
+
+        col_debug.download_button(
+            label="📥 Télécharger les logs",
+            data="\n".join(st.session_state["log_buffer"]),
+            file_name="debug_SPQR.log",
+            mime="text/plain",
+            key="debug_download"
+        )
         
 # === ALERT PARSER FACTORISÉ ===
 def parse_ids_alerts(log_content: str, engine_type: str) -> list:
