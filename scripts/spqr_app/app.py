@@ -385,8 +385,10 @@ def show_ids_testing():
             config = json.load(f)
             host_root = config.get("environnement", {}).get("host_project_path", "/chemin/local/vers/le/projet")
         local_path = log_dir.replace("/app", host_root, 1)
-        st.markdown(f"[Ouvrir le dossier de logs]({local_path})")
-    
+        st.code(local_path)
+        st.info("Copiez ce chemin et ouvrez-le dans votre gestionnaire de fichiers.")
+        
+  
     else:
         st.info("Aucun dossier de logs généré pour cette session.")
 
