@@ -224,7 +224,13 @@ class SPQRSimple:
                 cleanup = False
             )
             report = self.generate_analysis_report(log_dir)
-            return {"log_dir": str(log_dir)}
+            alerts = report.get("alerts", [])
+            
+            return {
+                "log_dir": str(log_dir),
+                "alert_count": len(alerts),
+                "alerts" : alerts
+                }
         
         except Exception as e:
             logger.error(f"Error during analysis: {str(e)}")
