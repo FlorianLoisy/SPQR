@@ -127,9 +127,11 @@ class SPQRSimple:
     def generate_report(self, log_file: str) -> str:
         """
         Génère un rapport résumé à partir d'un fichier de log eve.json ou fast.log de Suricata.
+        Le rapport est créé dans le même dossier que le fichier de log.
         """
-        report_dir = Path(self.config["output"]["reports_dir"])
-        os.makedirs(report_dir, exist_ok=True)
+        log_file_path = Path(log_file)
+        report_dir = log_file_path.parent  # Utilise le même dossier que le log
+        report_dir.mkdir(parents=True, exist_ok=True)
         timestamp = self.get_timestamp()
         report_path = report_dir / f"report_{timestamp}.txt"
 
@@ -207,49 +209,25 @@ class SPQRSimple:
         Analyse un fichier PCAP avec une sonde IDS et génère un rapport détaillé.
         """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_dir = Path(f"output/logs/{timestamp}/{engine.replace(' ', '_').lower()}")
-        report_dir = log_dir / "report"
+        project_root = Path("/app")
+        log_dir = project_root / "temp" / "output" / "logs" / f"{timestamp}" / engine.replace(' ', '_').lower()
+
         try:
             log_dir.mkdir(parents=True, exist_ok=True)
-            report_dir.mkdir(parents=True, exist_ok=True)
+
             results = self._run_ids_analysis(
                 pcap_path=pcap_path,
                 engine=engine,
                 log_dir=log_dir,
                 rules=rules,
-                custom_rules_file=custom_rules_file
+                custom_rules_file=custom_rules_file,
+                cleanup = False
             )
-            report = {
-                "metadata": {
-                    "timestamp": timestamp,
-                    "engine": engine,
-                    "pcap_file": str(pcap_path),
-                    "rules_source": "custom_file" if custom_rules_file else "inline" if rules else "default"
-                },
-                "analysis": results,
-                "statistics": self._generate_statistics(results)
-            }
-            report_path = report_dir / "analysis_report.json"
-            alerts_path = report_dir / "alerts.csv"
-            summary_path = report_dir / "summary.txt"
-            with open(report_path, 'w') as f:
-                json.dump(report, f, indent=2)
-            if results.get("alerts"):
-                pd.DataFrame(results["alerts"]).to_csv(alerts_path, index=False)
-            summary = self._generate_summary(report)
-            summary_path.write_text(summary)
-            if (log_dir / "fast.log").exists():
-                shutil.copy2(log_dir / "fast.log", report_dir / "ids.log")
-            elif (log_dir / "alert").exists():
-                shutil.copy2(log_dir / "alert", report_dir / "ids.log")
-            return {
-                "report_dir": str(report_dir),
-                "alerts": results.get("alerts", []),
-                "summary": summary
-            }
+            report = self.generate_analysis_report(log_dir)
+
         except Exception as e:
             logger.error(f"Error during analysis: {str(e)}")
-            raise
+            return {"error": str(e)}
 
     # --- Méthodes privées de reporting/parse ---
     def _generate_statistics(self, results: dict) -> dict:
@@ -266,7 +244,57 @@ class SPQRSimple:
             },
             "unique_signatures": len(set(a.get("signature", "") for a in alerts))
         }
+        
+    def generate_analysis_report(self, log_dir: Path) -> dict:
+        """
+        Génère un rapport d'analyse à partir des fichiers de log présents dans log_dir.
+        """
+        report_dir = log_dir / "report"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        report_path = report_dir / "analysis_report.json"
+        alerts_path = report_dir / "alerts.csv"
+        summary_path = report_dir / "summary.txt"
 
+        # Exemple : lecture des logs
+        fastlog = log_dir / "fast.log"
+        alertlog = log_dir / "alert"
+        alerts = []
+        if fastlog.exists():
+            with open(fastlog) as f:
+                for line in f:
+                    if line.strip():
+                        alerts.append({"raw": line.strip()})
+        elif alertlog.exists():
+            with open(alertlog) as f:
+                for line in f:
+                    if line.strip():
+                        alerts.append({"raw": line.strip()})
+
+        # Génère le rapport
+        report = {
+            "metadata": {
+                "log_dir": str(log_dir),
+                "generated_at": datetime.now().isoformat(),
+            },
+            "alerts": alerts,
+            "statistics": {
+                "total_alerts": len(alerts)
+            }
+        }
+        with open(report_path, 'w') as f:
+            json.dump(report, f, indent=2)
+        pd.DataFrame(alerts).to_csv(alerts_path, index=False)
+        summary = f"Total alerts: {len(alerts)}"
+        summary_path.write_text(summary)
+        return {
+            "report_dir": str(report_dir),
+            "report_path": str(report_path),
+            "alerts_path": str(alerts_path),
+            "summary_path": str(summary_path),
+            "alerts": alerts,
+            "summary": summary
+        }
+        
     def _generate_summary(self, report: dict) -> str:
         """
         Génère un résumé humain lisible à partir d'un rapport d'analyse
