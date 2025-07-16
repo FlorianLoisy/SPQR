@@ -6,6 +6,7 @@ import logging
 import subprocess
 import requests
 import shutil
+import webbrowser 
 from scripts.generate_traffic.protocol_factory import ProtocolGeneratorFactory
 from scripts.utils.utils import abs_path, load_json_or_yaml
 from scripts.process.process import SPQRSimple
@@ -344,7 +345,10 @@ def show_ids_testing():
                     rules=custom_rules if rules_type == "Règles personnalisées" else None,
                     custom_rules_file=rules_file if rules_type == "Fichier de règles" else None
                 )
-
+                
+                if "log_dir" in result:
+                    st.session_state["dernier_log_dir"] = result["log_dir"]
+                    
                 if "error" in result:
                     st.error(f"❌ Erreur: {result['error']}")
                 else:
@@ -372,6 +376,20 @@ def show_ids_testing():
                 # Nettoyage
                 if 'temp_pcap' in locals() and temp_pcap.exists():
                     temp_pcap.unlink()
+
+    # À la fin, après l'affichage des résultats :
+    if "dernier_log_dir" in st.session_state:
+        log_dir = st.session_state["dernier_log_dir"]
+        st.markdown(f"**Dossier de logs généré :** `{log_dir}`")
+        if st.button("📂 Ouvrir le dossier de logs"):
+            # Ouvre le dossier dans le gestionnaire de fichiers du système
+            import subprocess
+            subprocess.Popen(["xdg-open", log_dir])
+    else:
+        st.info("Aucun dossier de logs généré pour cette session.")
+
+# Lors de la génération des logs, pense à stocker le chemin :
+# st.session_state["dernier_log_dir"] = chemin_vers_le_dossier_logs
 
     # Afficher l'aide
     with st.expander("ℹ️ Aide"):
