@@ -5,6 +5,8 @@ import json
 import logging
 import subprocess
 import requests
+import shutil
+import os
 from scripts.generate_traffic.protocol_factory import ProtocolGeneratorFactory
 from scripts.utils.utils import abs_path, load_json_or_yaml
 from scripts.process.process import SPQRSimple
@@ -15,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 
 
-# Configure logging
+
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
@@ -218,13 +220,13 @@ def show_pcap_generation():
                 }
 
                 # Paramètres spécifiques au protocole (ex : HTTP)
-                protocol_params = edited_config or {}
+                custom_params = edited_config or {}
 
                 # Génération du PCAP
                 result = spqr_web.spqr.generate_pcap(
                     attack_type=attack_type,
                     config=base_config,
-                    protocol_params=protocol_params  # 👈 Ajout du 2e dict
+                    custom_params=custom_params  # 👈 Ajout du 2e dict
                 )
                 if isinstance(result, dict) and 'error' in result:
                     st.error(f"❌ Erreur: {result['error']}")
@@ -343,7 +345,10 @@ def show_ids_testing():
                     rules=custom_rules if rules_type == "Règles personnalisées" else None,
                     custom_rules_file=rules_file if rules_type == "Fichier de règles" else None
                 )
-
+                
+                if "log_dir" in result:
+                    st.session_state["dernier_log_dir"] = result["log_dir"]
+                    
                 if "error" in result:
                     st.error(f"❌ Erreur: {result['error']}")
                 else:
@@ -371,6 +376,24 @@ def show_ids_testing():
                 # Nettoyage
                 if 'temp_pcap' in locals() and temp_pcap.exists():
                     temp_pcap.unlink()
+
+    # À la fin, après l'affichage des résultats :
+    if "dernier_log_dir" in st.session_state:
+        log_dir = st.session_state["dernier_log_dir"]
+        # Si le dossier est monté sur la machine locale, adapte le chemin :
+        with open("config/config.json") as f:
+            config = json.load(f)
+            host_root = config.get("environnement", {}).get("host_project_path", "/chemin/local/vers/le/projet")
+        local_path = log_dir.replace("/app", host_root, 1)
+        st.code(local_path)
+        st.info("Copiez ce chemin et ouvrez-le dans votre gestionnaire de fichiers.")
+        
+  
+    else:
+        st.info("Aucun dossier de logs généré pour cette session.")
+
+# Lors de la génération des logs, pense à stocker le chemin :
+# st.session_state["dernier_log_dir"] = chemin_vers_le_dossier_logs
 
     # Afficher l'aide
     with st.expander("ℹ️ Aide"):
@@ -446,15 +469,43 @@ def main():
         st.session_state.page = "Accueil"
     with st.sidebar:
         st.title("SPQR Navigation")
-        selected = st.radio("Navigation", ["Accueil", "Génération PCAP", "Test de règle IDS"])
+        is_dev_mode = st.sidebar.checkbox("🔍 Activer le mode développeur", value=False)
+        st.session_state["is_dev_mode"] = is_dev_mode
+        if "log_buffer" not in st.session_state:
+            st.session_state["log_buffer"] = []
+        selected = st.radio("Navigation", ["Accueil", "Génération PCAP", "Test de règle IDS", "Gestion de l'outil"])
         st.session_state.page = selected
+        
     if st.session_state.page == "Accueil":
         show_home()
     elif st.session_state.page == "Génération PCAP":
         show_pcap_generation()
     elif st.session_state.page == "Test de règle IDS":
         show_ids_testing()
+    elif st.session_state.page == "Gestion de l'outil":
+        show_tool_management() 
+    
+    col_main, col_debug = st.columns([3, 1])  # Layout horizontal
 
+    with col_main:
+    # Interface principale (exécution, protocole, résultats, etc.)
+        st.markdown("## Résultats de l'analyse")
+    
+    if st.session_state.get("is_dev_mode", False):
+        with col_debug.expander("🛠️ Debug", expanded=False):
+            if st.session_state["log_buffer"]:
+                st.code("\n".join(st.session_state["log_buffer"]), language="text")
+            else:
+                st.info("Aucun message de debug.")
+
+        col_debug.download_button(
+            label="📥 Télécharger les logs",
+            data="\n".join(st.session_state["log_buffer"]),
+            file_name="debug_SPQR.log",
+            mime="text/plain",
+            key="debug_download"
+        )
+        
 # === ALERT PARSER FACTORISÉ ===
 def parse_ids_alerts(log_content: str, engine_type: str) -> list:
     """Parse alerts from Suricata or Snort log (factorisé)."""
@@ -560,5 +611,33 @@ def get_engine_paths(engine: str) -> dict:
         "output": abs_path("output") / engine_type / version
     }
 
+def show_tool_management():
+    st.header("🛠️ Gestion de l’outil")
+    st.markdown("Supprimez les fichiers temporaires générés par l’outil (dossier `/temp/`).")
+
+    temp_dir = abs_path("temp")
+    if not temp_dir.exists():
+        st.info("Le dossier /temp/ n’existe pas.")
+        return
+
+    temp_files = list(temp_dir.glob("*"))
+    st.write(f"Fichiers temporaires détectés : {len(temp_files)}")
+    if temp_files:
+        for f in temp_files:
+            st.write(f"- {f.name}")
+
+        if st.button("🗑️ Supprimer tous les fichiers temporaires"):
+            try:
+                for f in temp_files:
+                    if f.is_file() or f.is_symlink():
+                        f.unlink()
+                    elif f.is_dir():
+                        shutil.rmtree(f)
+                st.success("Tous les fichiers temporaires ont été supprimés.")
+            except Exception as e:
+                st.error(f"Erreur lors de la suppression : {str(e)}")
+    else:
+        st.info("Aucun fichier temporaire à supprimer.")
+        
 if __name__ == "__main__":
     main()
