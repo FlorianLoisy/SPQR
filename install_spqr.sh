@@ -20,6 +20,12 @@ warn() {
     echo -e "${YELLOW}[WARNING] $1${NC}"
 }
 
+# Chemin absolu du projet
+PROJECT_PATH="$(pwd)"
+
+# Met à jour host_project_path dans config/config.json
+jq --arg path "$PROJECT_PATH" '.environnement.host_project_path = $path' config/config.json > config/config.tmp && mv config/config.tmp config/config.json
+
 # Vérification des prérequis
 check_prerequisites() {
     log "Vérification des prérequis..."

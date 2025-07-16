@@ -6,7 +6,7 @@ import logging
 import subprocess
 import requests
 import shutil
-import webbrowser 
+import os
 from scripts.generate_traffic.protocol_factory import ProtocolGeneratorFactory
 from scripts.utils.utils import abs_path, load_json_or_yaml
 from scripts.process.process import SPQRSimple
@@ -380,11 +380,13 @@ def show_ids_testing():
     # À la fin, après l'affichage des résultats :
     if "dernier_log_dir" in st.session_state:
         log_dir = st.session_state["dernier_log_dir"]
-        st.markdown(f"**Dossier de logs généré :** `{log_dir}`")
-        if st.button("📂 Ouvrir le dossier de logs"):
-            # Ouvre le dossier dans le gestionnaire de fichiers du système
-            import subprocess
-            subprocess.Popen(["xdg-open", log_dir])
+        # Si le dossier est monté sur la machine locale, adapte le chemin :
+        with open("config/config.json") as f:
+            config = json.load(f)
+            host_root = config.get("environnement", {}).get("host_project_path", "/chemin/local/vers/le/projet")
+        local_path = log_dir.replace("/app", host_root, 1)
+        st.markdown(f"[Ouvrir le dossier de logs]({local_path})")
+    
     else:
         st.info("Aucun dossier de logs généré pour cette session.")
 
