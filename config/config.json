@@ -1,4 +1,7 @@
 {
+  "environnement": {
+    "host_project_path": "/home/florian/Projets/Github_SPQR/SPQR"
+  },
   "network": {
     "source_ip": "192.168.1.10",
     "dest_ip": "192.168.1.20",
