@@ -4,7 +4,7 @@ SPQR est une solution d'analyse de trafic réseau utilisant plusieurs IDS (Suric
 
 ## Prérequis
 
-- Linux (testé sur Ubuntu 22.04)
+- Linux (testé sur DEBIAN 12)
 - Docker
 - Docker Compose
 - Python 3.11+
