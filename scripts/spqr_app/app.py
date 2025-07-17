@@ -8,14 +8,13 @@ import requests
 import shutil
 import os
 from scripts.generate_traffic.protocol_factory import ProtocolGeneratorFactory
-from scripts.utils.utils import abs_path, load_json_or_yaml
+from scripts.utils.utils import abs_path, load_json_or_yaml, download_et_rules
 from scripts.process.process import SPQRSimple
 from typing import Dict, List, Any, Optional
 from scripts.utils.file_watcher import FileWatcher
 import yaml  # Ajout de l'import yaml
 from datetime import datetime   
 from pathlib import Path
-
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -301,6 +300,17 @@ def show_ids_testing():
 
     with col2:
         # Type de règles
+        
+        with st.expander("🛡️ Mise à jour des règles IDS"):
+            st.markdown("Vous pouvez mettre à jour les règles *Emerging Threats Open* pour Suricata.")
+            if st.button("🔄 Télécharger les dernières règles ET Open"):
+                with st.spinner("Téléchargement des règles..."):
+                    success = download_et_rules(engine=selected_engine)
+                    if success:
+                        st.success("✅ Règles mises à jour avec succès !")
+                    else:
+                        st.error("❌ La mise à jour a échoué. Vérifiez votre connexion.")
+                
         rules_type = st.radio(
             "Type de règles",
             ["Règles par défaut", "Règles personnalisées", "Fichier de règles"],
@@ -319,6 +329,12 @@ def show_ids_testing():
                 type=['rules'],
                 help="Sélectionnez un fichier de règles IDS"
             )
+        elif rules_type == "Règles par défaut":
+            rule_file = st.selectbox(
+                "Choix du fichier de règles à utiliser", 
+                ["suricata.rules", "suricata_ET.rules"],
+                key="rule_file"
+                )
 
     # Bouton d'analyse
     if st.button("🚀 Lancer l'analyse"):
