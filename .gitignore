@@ -41,3 +41,6 @@ output/logs/*
 output/run/*
 !output/logs/.gitkeep
 !output/run/.gitkeep
+
+# Ignore les jeux de règles EmergingThreats
+suricata_ET.rules
