@@ -23,7 +23,13 @@ warn() {
 # Vérification des prérequis
 check_prerequisites() {
     log "Vérification des prérequis..."
-    
+      
+    # Vérifier Curl
+    if ! command -v docker &> /dev/null; then
+        error "Curl n'est pas installé. Installation..."
+        sudo apt update && sudo apt upgrade && sudo apt install curl
+    fi  
+
     # Vérifier Docker
     if ! command -v docker &> /dev/null; then
         error "Docker n'est pas installé. Installation..."
@@ -65,7 +71,7 @@ build_images() {
     log "Construction des images Docker..."
     
     # Construction de toutes les images
-    docker compose build || error "Erreur lors de la construction des images"
+    docker-compose build || error "Erreur lors de la construction des images"
     
     # Vérification des images
     expected_images=("spqr_streamlit" "spqr_suricata6015" "spqr_suricata702" "spqr_snort29" "spqr_snort3")
@@ -79,7 +85,7 @@ test_installation() {
     log "Test de l'installation..."
     
     # Démarrage des services
-    docker compose up -d
+    docker-compose up
     
     # Attente du démarrage de Streamlit
     sleep 10
@@ -92,13 +98,13 @@ test_installation() {
     fi
     
     # Test rapide avec Suricata
-    docker compose exec -T spqr_suricata6015 suricata -V || error "Suricata test failed"
+    docker-compose exec -T spqr_suricata6015 suricata -V || error "Suricata test failed"
 }
 
 # Nettoyage
 cleanup() {
     log "Nettoyage..."
-    docker compose down
+    docker-compose down
     docker system prune -f
 }
 
