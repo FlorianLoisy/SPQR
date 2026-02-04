@@ -25,30 +25,31 @@ check_prerequisites() {
     log "Vérification des prérequis..."
       
     # Vérifier Curl
-    if ! command -v docker &> /dev/null; then
-        error "Curl n'est pas installé. Installation..."
+    if ! command -v curl &> /dev/null; then
+        warn "Curl n'est pas installé. Installation..."
         sudo apt update && sudo apt upgrade && sudo apt install curl
     fi  
 
     # Vérifier Docker
     if ! command -v docker &> /dev/null; then
-        error "Docker n'est pas installé. Installation..."
+        warn "Docker n'est pas installé. Installation..."
         curl -fsSL https://get.docker.com -o get-docker.sh
         sudo sh get-docker.sh
         sudo usermod -aG docker $USER
+	newgrp docker
         warn "Veuillez vous déconnecter et vous reconnecter pour utiliser Docker sans sudo"
     fi
 
     # Vérifier Docker Compose
     if ! command -v docker compose &> /dev/null; then
-        error "Docker Compose n'est pas installé"
-        sudo apt-get update && sudo apt-get install -y docker-compose-plugin
+        warn "Docker Compose n'est pas installé"
+        sudo apt-get update && sudo apt-get install -y docker-compose-plugin docker-compose
     fi
 
     # Vérifier Python
     if ! command -v python3 &> /dev/null; then
-        error "Python 3 n'est pas installé"
-        sudo apt-get update && sudo apt-get install -y python3 python3-pip
+        warn "Python 3 n'est pas installé"
+        sudo apt-get update && sudo apt-get install -y python3 python3-pip python3-setuptools
     fi
 }
 
